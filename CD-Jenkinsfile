@@ -19,7 +19,7 @@ pipeline {
         //EKS_CLUSTER_NAME = sh(script: "aws eks list-clusters --region ${AWS_REGION} --query 'clusters[0]' --output text",returnStdout: true).trim()
         EKS_CLUSTER_NAME = sh(
         script: """
-            aws eks list-clusters --region ${AWS_REGION} --query "clusters[?contains(@, 'deepak') || contains(@, 'project')]" --output text | head -1
+            aws eks list-clusters --region ${AWS_REGION} --query "clusters[?contains(@, 'deepak')]" --output text | head -1
         """,
         returnStdout: true
         ).trim()
