@@ -1,0 +1,77 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'IMAGE_TAG', defaultValue: '', description: 'Tag of the Docker image')
+        string(name: 'ECR_REPO', defaultValue: '', description: 'ECR repository name')
+        string(name: 'AWS_REGION', defaultValue: '', description: 'AWS Region')
+        string(name: 'APP_NAME', defaultValue: 'tours-travels-webapp', description: 'Name of the application')
+    }
+
+    environment {
+        AWS_REGION = "${params.AWS_REGION}" // Ensure the AWS_REGION is set in the parameters
+        ECR_REPO   = "${params.ECR_REPO}"    // Ensure the ECR_REPO is set in the parameters
+        IMAGE_TAG  = "${params.IMAGE_TAG}"
+        APP_NAME   = "${params.APP_NAME}"
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"
+        ARGOCD_NAMESPACE = "argocd"
+        ARGOCD_VERSION = "v3.0.5"
+        //EKS_CLUSTER_NAME = sh(script: "aws eks list-clusters --region ${AWS_REGION} --query 'clusters[0]' --output text",returnStdout: true).trim()
+        EKS_CLUSTER_NAME = sh(
+        script: """
+            aws eks list-clusters --region ${AWS_REGION} --query "clusters[?contains(@, 'deepak') || contains(@, 'project')]" --output text | head -1
+        """,
+        returnStdout: true
+        ).trim()
+        // Define the Git repository and path for Kubernetes manifests
+        GIT_REPO = "https://github.com/msdeepak052/tours-and-travels-webapp.git" // Your manifests repo
+        GIT_PATH = "manifests" // Path to your manifests in the repo
+        IMAGE_TAG = "${env.VERSION}" // Passed from CI pipeline
+    }
+
+
+    stages {
+
+        stage("Checkout Kubernetes Manifests") {
+            steps {
+                // Clone the repository containing deployment and service files
+                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webapp.git'
+            }
+        }
+
+        stage('Configure kubeconfig') {
+            steps {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-ecr-creds']]) {
+                    sh "aws eks update-kubeconfig --region ${AWS_REGION} --name your-eks-cluster-name"
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                script {
+                    def ecrUrl = sh(
+                        script: "aws ecr describe-repositories --repository-names ${ECR_REPO} --region ${AWS_REGION} --query 'repositories[0].repositoryUri' --output text",
+                        returnStdout: true
+                    ).trim()
+                    def fullImage = "${ecrUrl}:${IMAGE_TAG}"
+
+                    sh """
+                        sed 's|IMAGE_URI|${fullImage}|' k8s/deployment.yaml > k8s/deploy-final.yaml
+                        kubectl apply -f k8s/deploy-final.yaml
+                        kubectl rollout status deployment/my-java-app
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ CD pipeline successfully deployed image ${IMAGE_TAG}"
+        }
+        failure {
+            echo "❌ CD deployment failed for image ${IMAGE_TAG}"
+        }
+    }
+}

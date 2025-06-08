@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${pageTitle}">DK Tours and Travels</title>
+    <link rel="stylesheet" href="/webjars/bootstrap/5.3.0/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/webjars/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="icon" href="/images/favicon.ico">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <img src="/images/logo.png" alt="DK Tours Logo" height="40">
+                <span class="ms-2 brand-name">DK Tours and Travels</span>
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#"><i class="fas fa-home me-1"></i> Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="fas fa-suitcase me-1"></i> Tours</a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-calendar-alt me-1"></i> Bookings
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#"><i class="fas fa-plus-circle me-2"></i> New Booking</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="fas fa-list-alt me-2"></i> Booking Details</a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#"><i class="fas fa-percentage me-1"></i> Discounts</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link btn btn-primary ms-2 text-white" href="#"><i class="fas fa-phone-alt me-1"></i> Contact</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Banner -->
+<!-- Hero Banner with image background -->
+<div class="hero-banner">
+    <div class="overlay">
+        <div class="container hero-content">
+            <div class="row align-items-center">
+                <div class="col-lg-6">
+                    <h1 class="display-4 fw-bold mb-4">Explore the World with DK Tours</h1>
+                    <p class="lead mb-4">Discover amazing destinations with our exclusive packages</p>
+                    <div class="d-flex gap-3">
+                        <a href="#" class="btn btn-primary btn-lg px-4">
+                            <i class="fas fa-search me-2"></i> Explore Tours
+                        </a>
+                        <a href="#" class="btn btn-outline-light btn-lg px-4">
+                            <i class="fas fa-phone-alt me-2"></i> Call Us
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="floating-badge">
+        <i class="fas fa-tag me-1"></i> 25% Off Summer Deals!
+    </div>
+</div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar py-4" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
+        <div class="container">
+            <div class="row text-center text-white">
+                <div class="col-md-3">
+                    <h3 class="fw-bold">15+</h3>
+                    <p>Years Experience</p>
+                </div>
+                <div class="col-md-3">
+                    <h3 class="fw-bold">500+</h3>
+                    <p>Destinations</p>
+                </div>
+                <div class="col-md-3">
+                    <h3 class="fw-bold">10K+</h3>
+                    <p>Happy Travelers</p>
+                </div>
+                <div class="col-md-3">
+                    <h3 class="fw-bold">24/7</h3>
+                    <p>Customer Support</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container my-5">
+        <div class="row">
+            <!-- Quick Actions -->
+            <div class="col-md-4 mb-4">
+                <div class="card action-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-plus-circle card-icon"></i>
+                        <h3>New Booking</h3>
+                        <p>Create a new travel booking for your next adventure</p>
+                        <a href="#" class="btn btn-outline-primary">Start Booking</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card action-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-list-alt card-icon"></i>
+                        <h3>Booking Details</h3>
+                        <p>View and manage your existing bookings</p>
+                        <a href="#" class="btn btn-outline-primary">View Bookings</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card action-card">
+                    <div class="card-body text-center">
+                        <i class="fas fa-tag card-icon"></i>
+                        <h3>Special Offers</h3>
+                        <p>Check out our latest discounts and promotions</p>
+                        <a href="#" class="btn btn-outline-primary">View Offers</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Popular Destinations -->
+        <h2 class="text-center mb-4 section-title">Popular Destinations</h2>
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="destination-card">
+                    <img src="/images/destination1.jpg" class="img-fluid" alt="Paris">
+                    <div class="destination-overlay">
+                        <h4>Paris, France</h4>
+                        <p>From $999</p>
+                        <a href="#" class="btn btn-sm btn-light">Explore</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="destination-card">
+                    <img src="/images/destination2.jpg" class="img-fluid" alt="Bali">
+                    <div class="destination-overlay">
+                        <h4>Bali, Indonesia</h4>
+                        <p>From $1299</p>
+                        <a href="#" class="btn btn-sm btn-light">Explore</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="destination-card">
+                    <img src="/images/destination3.jpg" class="img-fluid" alt="New York">
+                    <div class="destination-overlay">
+                        <h4>New York, USA</h4>
+                        <p>From $1499</p>
+                        <a href="#" class="btn btn-sm btn-light">Explore</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Testimonials Section -->
+    <section class="testimonials py-5 bg-light">
+        <div class="container">
+            <h2 class="text-center section-title mb-5">What Our Travelers Say</h2>
+            <div class="row">
+                <div class="col-md-4 mb-4">
+                    <div class="testimonial-card p-4 bg-white rounded">
+                        <div class="rating mb-3 text-warning">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <p class="mb-4">"DK Tours made our honeymoon unforgettable! Everything was perfectly arranged."</p>
+                        <div class="d-flex align-items-center">
+                            <img src="/images/testimonial1.jpg" alt="Sarah J." class="rounded-circle me-3" width="50">
+                            <div>
+                                <h6 class="mb-0">Sarah J.</h6>
+                                <small class="text-muted">Honeymoon in Bali</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="testimonial-card p-4 bg-white rounded">
+                        <div class="rating mb-3 text-warning">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <p class="mb-4">"Excellent service! The guides were knowledgeable and the hotels were superb."</p>
+                        <div class="d-flex align-items-center">
+                            <img src="/images/testimonial2.jpg" alt="Michael T." class="rounded-circle me-3" width="50">
+                            <div>
+                                <h6 class="mb-0">Michael T.</h6>
+                                <small class="text-muted">Paris Vacation</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="testimonial-card p-4 bg-white rounded">
+                        <div class="rating mb-3 text-warning">
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star"></i>
+                            <i class="fas fa-star-half-alt"></i>
+                        </div>
+                        <p class="mb-4">"We'll definitely use DK Tours again. They handled everything from flights to activities."</p>
+                        <div class="d-flex align-items-center">
+                            <img src="/images/testimonial3.jpg" alt="Priya K." class="rounded-circle me-3" width="50">
+                            <div>
+                                <h6 class="mb-0">Priya K.</h6>
+                                <small class="text-muted">Family Trip to NYC</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <div class="newsletter py-5" style="background-color: var(--accent-color);">
+        <div class="container text-center">
+            <h2 class="mb-4">Stay Updated with Our Travel Deals</h2>
+            <p class="mb-4">Subscribe to our newsletter for exclusive offers and travel inspiration</p>
+            <div class="row justify-content-center">
+                <div class="col-md-6">
+                    <form class="input-group">
+                        <input type="email" class="form-control" placeholder="Your email address">
+                        <button class="btn btn-dark" type="submit">Subscribe</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer bg-dark text-white py-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-4">
+                    <h5>About DK Tours</h5>
+                    <p>We provide the best travel experiences with over 15 years of expertise in the tourism industry.</p>
+                    <div class="social-icons mt-3">
+                        <a href="#" class="text-white me-3"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" class="text-white me-3"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="text-white me-3"><i class="fab fa-instagram"></i></a>
+                        <a href="#" class="text-white"><i class="fab fa-linkedin-in"></i></a>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h5>Quick Links</h5>
+                    <ul class="list-unstyled">
+                        <li><a href="#" class="text-white">Home</a></li>
+                        <li><a href="#" class="text-white">Tours</a></li>
+                        <li><a href="#" class="text-white">Bookings</a></li>
+                        <li><a href="#" class="text-white">Discounts</a></li>
+                        <li><a href="#" class="text-white">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <h5>Contact Us</h5>
+                    <p><i class="fas fa-phone me-2"></i> +1 (234) 567-890</p>
+                    <p><i class="fas fa-envelope me-2"></i> info@dktours.com</p>
+                    <p><i class="fas fa-map-marker-alt me-2"></i> 123 Travel Street, Tour City</p>
+                </div>
+            </div>
+            <hr>
+            <div class="text-center">
+                <p class="mb-0">&copy; 2023 DK Tours and Travels. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/webjars/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/script.js"></script>
+</body>
+</html>

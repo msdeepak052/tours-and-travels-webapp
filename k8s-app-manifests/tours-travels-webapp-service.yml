@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tours-travels-service
+  namespace: app-ns
+spec:
+  type: LoadBalancer
+  selector:
+    app: tours-travels-webapp
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
