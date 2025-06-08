@@ -11,7 +11,7 @@
     </parent>
     
     <groupId>com.example</groupId>
-    <artifactId>tours-travels</artifactId>
+    <artifactId>tours-travels-webapp</artifactId>
     <version>1.0.0</version>
     <name>Tours and Travels</name>
     <description>Dummy Tours and Travels Application</description>
