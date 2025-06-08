@@ -11,7 +11,7 @@ ENV APP_NAME=$APP_NAME
 WORKDIR /opt
 
 # Copy JAR with dynamic name (assuming standard Maven naming: ${APP_NAME}-*.jar)
-COPY target/${APP_NAME}.jar ${APP_NAME}.jar
+COPY target/${APP_NAME} ${APP_NAME}
 
 # Expose default Spring Boot port (change if needed)
 EXPOSE 8080
