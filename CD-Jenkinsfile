@@ -6,7 +6,6 @@ pipeline {
         string(name: 'ECR_REPO', defaultValue: '', description: 'ECR repository name')
         string(name: 'AWS_REGION', defaultValue: '', description: 'AWS Region')
         string(name: 'APP_NAME', defaultValue: 'tours-travels-webapp', description: 'Name of the application')
-        string(name: 'VERSION', defaultValue: '', description: 'Version')
     }
 
     environment {
@@ -27,11 +26,22 @@ pipeline {
         // Define the Git repository and path for Kubernetes manifests
         GIT_REPO = "https://github.com/msdeepak052/tours-and-travels-webapp.git" // Your manifests repo
         GIT_PATH = "k8s-app-manifests" // Path to your manifests in the repo
-        IMAGE_TAG = "${params.VERSION}" // Passed from CI pipeline
+        IMAGE_TAG = "${params.IMAGE_TAG}" // Passed from CI pipeline
     }
 
 
     stages {
+        stage('Print Parameters and Environment') {
+            steps {
+                script {
+                    echo "=== BUILD PARAMETERS ==="
+                    echo "AWS_REGION: ${params.AWS_REGION}"
+                    echo "ECR_REPO: ${params.ECR_REPO}"
+                    echo "IMAGE_TAG: ${params.IMAGE_TAG}"
+                    echo "APP_NAME: ${params.APP_NAME}"
+               }
+            }
+       }
         // Install Argo CD
         stage('Install Argo CD') {
             steps {
