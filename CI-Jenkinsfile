@@ -195,7 +195,6 @@ pipeline {
                         string(name: 'IMAGE_TAG', value: "${VERSION}"),
                         string(name: 'ECR_REPO', value: "${ECR_REPO}")
                     ]
-                echo "CI pipeline succeeded"
             }
             failure {
                 echo "CI pipeline failed. CD will NOT be triggered."
