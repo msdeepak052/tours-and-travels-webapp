@@ -19,4 +19,4 @@ EXPOSE 8080
 # Run the JAR (use ENV variable in ENTRYPOINT)
 # ENTRYPOINT ["java", "-jar", "${APP_NAME}.jar"]
 
-ENTRYPOINT ["sh", "-c", "java -jar ${APP_NAME}.jar"]
+ENTRYPOINT ["sh", "-c", "java -jar ${APP_NAME}"]
