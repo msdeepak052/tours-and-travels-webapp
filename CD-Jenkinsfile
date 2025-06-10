@@ -42,10 +42,9 @@ pipeline {
                 sh "argocd version --client"
             }
         }
-        // Get the artifcats from the Github
         stage('Git Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webapp.git'
+                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webpage.git'
             }
         }
         
@@ -149,7 +148,7 @@ pipeline {
                         error("Failed to retrieve ECR URL for repository: ${ECR_REPO}")
                     }
 
-                    env.IMAGE_URI = "${ecrUrl}:${env.VERSION}"
+                    env.IMAGE_URI = "${ecrUrl}:${ECR_REPO}:${IMAGE_TAG}"
                     env.ECR_IMAGE_NAME = "${env.IMAGE_URI}"
                     echo "ECR Image Name: ${env.ECR_IMAGE_NAME}"
 
@@ -174,7 +173,7 @@ pipeline {
             steps{
                 script{
                     withCredentials([gitUsernamePassword(credentialsId: 'githubCreds', gitToolName: 'Default')]) {
-                        sh """
+                        sh '''
                             echo "Initializing git repository: "
                             git init
                         
@@ -186,7 +185,7 @@ pipeline {
                             
                             echo "Pushing changes to remote repository"
                             git push https://github.com/msdeepak052/tours-and-travels-webapp.git main
-                        """
+                        '''
                     }
                 }
             }
@@ -195,24 +194,25 @@ pipeline {
 
 }
 
-post {
-    always {
-        script {
-            echo "=== CLEANUP ==="
+
+    post {
+        always {
+            script {
+                echo "=== CLEANUP ==="
                 deleteDir()
             }
         }
-    success {
-        script {
-            echo "✅ DEPLOYMENT SUCCESSFUL"
-            echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
-            echo "Application URL: http://${env.APP_URL}"
+        success {
+            script {
+                echo "✅ DEPLOYMENT SUCCESSFUL"
+                echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
+                echo "Application URL: http://${env.APP_URL}"
+            }
         }
-    }
-    failure {
-        script {
-            echo "❌ DEPLOYMENT FAILED"
-            echo "Check logs for details"
+        failure {
+            script {
+                echo "❌ DEPLOYMENT FAILED"
+                echo "Check logs for details"
+            }
         }
-    }
 }
