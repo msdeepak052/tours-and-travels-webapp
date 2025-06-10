@@ -2,10 +2,14 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'IMAGE_TAG', defaultValue: '1.0.7', description: 'Tag of the Docker image')
-        string(name: 'ECR_REPO', defaultValue: 'app/tour-travels-webapp', description: 'ECR repository name')
-        string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS Region')
-        string(name: 'APP_NAME', defaultValue: 'tours-travels-webapp', description: 'Name of the application')
+        // string(name: 'IMAGE_TAG', defaultValue: '1.0.7', description: 'Tag of the Docker image')
+        // string(name: 'ECR_REPO', defaultValue: 'app/tour-travels-webapp', description: 'ECR repository name')
+        // string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS Region')
+        // string(name: 'APP_NAME', defaultValue: 'tours-travels-webapp', description: 'Name of the application')
+        string(name: 'IMAGE_TAG', defaultValue: '', description: 'Tag of the Docker image')
+        string(name: 'ECR_REPO', defaultValue: '', description: 'ECR repository name')
+        string(name: 'AWS_REGION', defaultValue: '', description: 'AWS Region')
+        string(name: 'APP_NAME', defaultValue: '', description: 'Name of the application')
     }
 
     environment {
@@ -38,13 +42,12 @@ pipeline {
                 sh "argocd version --client"
             }
         }
-        // stage('Clone GitHub Repository') {
-        //     steps {
-        //         // Clone the repository containing deployment and service files
-        //         git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webpage.git'
-
-        //     }
-        // }
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webpage.git'
+            }
+        }
+        
         stage('Install Argo CD in Cluster') {
             steps {
                 script {
@@ -92,16 +95,31 @@ pipeline {
                     """
 
                     // Get server URL
+
                     env.ARGOCD_SERVER = sh(
                         script: """
-                            until kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-                            do
-                                sleep 5
-                                echo "Waiting for LoadBalancer hostname..."
-                            done
+                            timeout 300 bash -c '
+                                until hostname=\$(kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath="{.status.loadBalancer.ingress[0].hostname}") && [ -n "\$hostname" ]
+                                do
+                                    sleep 5
+                                    echo "Waiting for LoadBalancer hostname..."
+                                done
+                                echo "\$hostname"
+                            '
                         """,
                         returnStdout: true
                     ).trim()
+
+                    // env.ARGOCD_SERVER = sh(
+                    //     script: """
+                    //         until kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                    //         do
+                    //             sleep 5
+                    //             echo "Waiting for LoadBalancer hostname..."
+                    //         done
+                    //     """,
+                    //     returnStdout: true
+                    // ).trim()
 
                     // Correct way to get and echo the password
                         env.ARGOCD_PASSWORD = sh(
@@ -109,95 +127,73 @@ pipeline {
                             returnStdout: true
                         ).trim()
 
-                    // env.ARGOCD_SERVER = sh(
-                    //     script: """
-                    //         timeout 300 bash -c '
-                    //             until hostname=\$(kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath="{.status.loadBalancer.ingress[0].hostname}") && [ -n "\$hostname" ]
-                    //             do
-                    //                 sleep 5
-                    //                 echo "Waiting for LoadBalancer hostname..."
-                    //             done
-                    //             echo "\$hostname"
-                    //         '
-                    //     """,
-                    //     returnStdout: true
-                    // ).trim()
+
 
                     echo "Argo CD Server URL: ${env.ARGOCD_SERVER}"
                     echo "Argo CD Admin Password: ${env.ARGOCD_PASSWORD}"   
 
-
-
-                    // Login to Argo CD
-                    sh """
-                        until argocd login ${env.ARGOCD_SERVER} --grpc-web \
-                        --username admin --password \$(cat argocd-admin-password.txt) \
-                        --insecure
-                        do
-                            sleep 5
-                            echo "Retrying Argo CD login..."
-                        done
-                    """
-
-                    // Add cluster
-                    sh """
-                        argocd cluster add \$(kubectl config current-context) \
-                        --name ${EKS_CLUSTER_NAME} \
-                        --yes
-                    """
                 }
             }
         }
-
-        stage('Deploy Application') {
+        stage("Image Tag update in Kubernetes manifests") {
             steps {
                 script {
-                    // Create application
-                    sh """
-                        argocd app create ${APP_NAME} \
-                        --repo ${GIT_REPO} \
-                        --path ${GIT_PATH} \
-                        --dest-server https://kubernetes.default.svc \
-                        --dest-namespace app-ns \
-                        --sync-policy automated \
-                        --auto-prune \
-                        --revision main \
-                        --upsert
-                    """
-
-                    // Sync and wait
-                    sh """
-                        argocd app sync ${APP_NAME} || true
-                        argocd app wait ${APP_NAME} --health --timeout 300
-                    """
-                }
-            }
-        }
-
-        stage('Verify Deployment') {
-            steps {
-                script {
-                    // Get application URL
-                    env.APP_URL = sh(
-                        script: """
-                            kubectl get svc tours-travels-service -n app-ns \
-                            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-                        """,
+                    // Get ECR URL with error handling
+                    def ecrUrl = sh(
+                        script: "aws ecr describe-repositories --repository-names ${ECR_REPO} --region ${AWS_REGION} --query 'repositories[0].repositoryUri' --output text",
                         returnStdout: true
                     ).trim()
 
-                    // Smoke test
-                    sh """
-                        until curl -s -o /dev/null -w "%{http_code}" http://${env.APP_URL} | grep 200
-                        do
-                            sleep 10
-                            echo "Waiting for application to respond..."
-                        done
-                    """
+                    if (!ecrUrl) {
+                        error("Failed to retrieve ECR URL for repository: ${ECR_REPO}")
+                    }
+
+                    env.IMAGE_URI = "${ecrUrl}:${env.VERSION}"
+                    env.ECR_IMAGE_NAME = "${env.IMAGE_URI}"
+                    echo "ECR Image Name: ${env.ECR_IMAGE_NAME}"
+
+                    dir('k8s-app-manifests') {
+                        // More robust sed command (works on both GNU and BSD sed)
+                        sh """
+                            # Backup original file (optional)
+                            cp tours-travels-webapp-deployment.yml tours-travels-webapp-deployment.yml.bak
+
+                            # Update image tag
+                            sed -i.bak 's|image: .*|image: ${env.ECR_IMAGE_NAME}|' tours-travels-webapp-deployment.yml
+
+                        """
+                        // Verify the change
+                        sh "grep 'image: ' tours-travels-webapp-deployment.yml"
+                    }
+                }
+            }
+        }
+
+        stage("Commit code changes and push to GitHub"){
+            steps{
+                script{
+                    withCredentials([gitUsernamePassword(credentialsId: 'githubCreds', gitToolName: 'Default')]) {
+                        sh '''
+                            echo "Initializing git repository: "
+                            git init
+                        
+                            echo "Adding remote repository: git add"
+                            git add .
+                            
+                            echo "Committing changes to Github Repository "
+                            git commit -m "Updated Image Tag in Kubernetes manifests to ${env.ECR_IMAGE_NAME}"
+                            
+                            echo "Pushing changes to remote repository"
+                            git push https://github.com/msdeepak052/tours-and-travels-webapp.git main
+                        '''
+                    }
                 }
             }
         }
     }
+
+}
+
 
     post {
         always {
