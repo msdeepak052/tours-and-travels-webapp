@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: tours-travels-webapp
-          image: 339712902352.dkr.ecr.ap-south-1.amazonaws.com/app/tour-travels-webapp:1.0.5
+          image: 339712902352.dkr.ecr.ap-south-1.amazonaws.com/app/tour-travels-webapp:null
           ports:
             - containerPort: 8080
           resources:
