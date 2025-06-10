@@ -1,6 +1,9 @@
 # DK Tours and Travels - Java Web Application
 
-![DK Tours Banner](/images/banner.jpg)
+##Flowchart
+
+![Tours-Travels-Webapp-Flowchart](https://github.com/user-attachments/assets/655971c8-5ff7-40b9-838c-634b3a55c8b5)
+
 
 A colorful, responsive tours and travels web application built with Java, Spring Boot, and Maven.
 
