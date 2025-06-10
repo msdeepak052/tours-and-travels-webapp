@@ -42,10 +42,9 @@ pipeline {
                 sh "argocd version --client"
             }
         }
-        // Get the artifcats from the Github
         stage('Git Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webapp.git'
+                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webpage.git'
             }
         }
         
@@ -149,7 +148,7 @@ pipeline {
                         error("Failed to retrieve ECR URL for repository: ${ECR_REPO}")
                     }
 
-                    env.IMAGE_URI = "${ecrUrl}:${ECR_REPO}:${IMAGE_TAG}"
+                    env.IMAGE_URI = "${ecrUrl}:${IMAGE_TAG}"
                     env.ECR_IMAGE_NAME = "${env.IMAGE_URI}"
                     echo "ECR Image Name: ${env.ECR_IMAGE_NAME}"
 
