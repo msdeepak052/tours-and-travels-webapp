@@ -195,26 +195,24 @@ pipeline {
 
 }
 
-
-    post {
-        always {
-            script {
-                echo "=== CLEANUP ==="
+post {
+    always {
+        script {
+            echo "=== CLEANUP ==="
                 deleteDir()
             }
         }
-        success {
-            script {
-                echo "✅ DEPLOYMENT SUCCESSFUL"
-                echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
-                echo "Application URL: http://${env.APP_URL}"
-            }
+    success {
+        script {
+            echo "✅ DEPLOYMENT SUCCESSFUL"
+            echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
+            echo "Application URL: http://${env.APP_URL}"
         }
-        failure {
-            script {
-                echo "❌ DEPLOYMENT FAILED"
-                echo "Check logs for details"
-            }
+    }
+    failure {
+        script {
+            echo "❌ DEPLOYMENT FAILED"
+            echo "Check logs for details"
         }
     }
 }
