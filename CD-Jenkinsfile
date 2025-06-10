@@ -86,14 +86,17 @@ pipeline {
                         -p '{"spec": {"type": "LoadBalancer"}}'
                     """
 
-                    // Get admin password
-                    sh """
-                        until kubectl -n ${ARGOCD_NAMESPACE} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d > argocd-admin-password.txt
-                        do
-                            sleep 5
-                            echo "Waiting for Argo CD admin secret..."
-                        done
-                    """
+                    // Get admin password 
+                    env.ARGOCD_PASSWORD = sh(
+                        script: """
+                            until kubectl -n ${ARGOCD_NAMESPACE} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+                            do
+                                sleep 5
+                                echo "Waiting for Argo CD admin secret..."
+                            done
+                        """,
+                        returnStdout: true
+                    ).trim()
 
                     // Get server URL
 
@@ -110,25 +113,6 @@ pipeline {
                         """,
                         returnStdout: true
                     ).trim()
-
-                    // env.ARGOCD_SERVER = sh(
-                    //     script: """
-                    //         until kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-                    //         do
-                    //             sleep 5
-                    //             echo "Waiting for LoadBalancer hostname..."
-                    //         done
-                    //     """,
-                    //     returnStdout: true
-                    // ).trim()
-
-                    // Correct way to get and echo the password
-                        env.ARGOCD_PASSWORD = sh(
-                            script: 'cat argocd-admin-password.txt',
-                            returnStdout: true
-                        ).trim()
-
-
 
                     echo "Argo CD Server URL: ${env.ARGOCD_SERVER}"
                     echo "Argo CD Admin Password: ${env.ARGOCD_PASSWORD}"   
@@ -200,13 +184,24 @@ pipeline {
                 deleteDir()
             }
         }
-        success {
-            script {
-                echo "✅ DEPLOYMENT SUCCESSFUL"
-                echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
-                echo "Application URL: http://${env.APP_URL}"
-            }
+    success {
+        script {
+            // Get the application URL from the LoadBalancer service
+            env.APP_URL = sh(
+                script: """
+                    kubectl get service tours-travels-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                """,
+                returnStdout: true
+            ).trim()
+            
+            echo "✅ DEPLOYMENT SUCCESSFUL"
+            echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
+            echo "Application URL: http://${env.APP_URL}"
+            
+            // If you want clickable links in Jenkins console:
+            echo "Application URL: <a href='http://${env.APP_URL}'>http://${env.APP_URL}</a>"
         }
+    }
         failure {
             script {
                 echo "❌ DEPLOYMENT FAILED"
@@ -216,6 +211,3 @@ pipeline {
     }
 
 }
-
-
-    
