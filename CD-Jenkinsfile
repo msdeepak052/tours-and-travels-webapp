@@ -42,9 +42,10 @@ pipeline {
                 sh "argocd version --client"
             }
         }
+        // Get the artifcats from the Github
         stage('Git Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webpage.git'
+                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webapp.git'
             }
         }
         
@@ -192,9 +193,6 @@ pipeline {
         }
     }
 
-}
-
-
     post {
         always {
             script {
@@ -215,4 +213,9 @@ pipeline {
                 echo "Check logs for details"
             }
         }
+    }
+
 }
+
+
+    
