@@ -205,7 +205,7 @@ pipeline {
             // Get the application URL from the LoadBalancer service
             env.APP_URL = sh(
                 script: """
-                    kubectl get service tours-travels-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                    kubectl get service tours-travels-service -n app-ns -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
                 """,
                 returnStdout: true
             ).trim()
