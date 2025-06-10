@@ -20,7 +20,7 @@ pipeline {
         
        // Nexus Configuration (set these in Jenkins credentials)
        
-        NEXUS_URL = "13.200.0.188:8081"
+        NEXUS_URL = "3.108.102.232:8081"
         NEXUS_REPOSITORY = "tours-travels-webapp"  // or "maven-snapshots"
         NEXUS_CREDENTIALS_ID = "nexus-credentials"  // Jenkins credentials ID for Nexus auth
         
