@@ -20,7 +20,7 @@ pipeline {
         
        // Nexus Configuration (set these in Jenkins credentials)
        
-        NEXUS_URL = "3.108.102.232:8081"
+        NEXUS_URL = "43.204.207.182:8081"
         NEXUS_REPOSITORY = "tours-travels-webapp"  // or "maven-snapshots"
         NEXUS_CREDENTIALS_ID = "nexus-credentials"  // Jenkins credentials ID for Nexus auth
         
@@ -41,7 +41,7 @@ pipeline {
         // Get the artifcats from the Github
         stage('Git Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webapp.git'
+                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webpage.git'
             }
         }
         
@@ -189,12 +189,15 @@ pipeline {
             success {
                 echo "✅ CI pipeline succeeded. Triggering CD pipeline..."
 
-                build job: 'tours-and-travels-cd-pipeline',
+                build job: 'cd-pipeline',
                     wait: false,
                     parameters: [
                         string(name: 'IMAGE_TAG', value: "${VERSION}"),
-                        string(name: 'ECR_REPO', value: "${ECR_REPO}")
+                        string(name: 'ECR_REPO', value: "${ECR_REPO}"),
+                        string(name: 'AWS_REGION', value: "${AWS_REGION}"),
+                        string(name: 'APP_NAME', value: "${APP_NAME}")
                     ]
+                echo "CI pipeline succeeded"
             }
             failure {
                 echo "CI pipeline failed. CD will NOT be triggered."
