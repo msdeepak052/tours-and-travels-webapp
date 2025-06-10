@@ -48,7 +48,6 @@ pipeline {
                 git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webapp.git'
             }
         }
-        
         stage('Install Argo CD in Cluster') {
             steps {
                 script {
@@ -59,20 +58,37 @@ pipeline {
                         --region ${AWS_REGION}
                     """
 
-                    // Create namespace if not exists
-                    sh "kubectl create namespace ${ARGOCD_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -"
+                    // Check if Argo CD is already installed
+                    def argocdInstalled = sh(
+                        script: """
+                            if kubectl get deployment argocd-server -n ${ARGOCD_NAMESPACE} >/dev/null 2>&1; then
+                                echo "true"
+                            else
+                                echo "false"
+                            fi
+                        """,
+                        returnStdout: true
+                    ).trim()
 
-                    // Install Argo CD
-                    sh """
-                        kubectl apply -n ${ARGOCD_NAMESPACE} -f \
-                        https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml
-                    """
+                    if (argocdInstalled == "false") {
+                        echo "Installing Argo CD..."
+                        // Create namespace if not exists
+                        sh "kubectl create namespace ${ARGOCD_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -"
 
-                    // Wait for Argo CD to be ready
-                    sh """
-                        kubectl wait --for=condition=available deployment/argocd-server \
-                        -n ${ARGOCD_NAMESPACE} --timeout=300s
-                    """
+                        // Install Argo CD
+                        sh """
+                            kubectl apply -n ${ARGOCD_NAMESPACE} -f \
+                            https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml
+                        """
+
+                        // Wait for Argo CD to be ready
+                        sh """
+                            kubectl wait --for=condition=available deployment/argocd-server \
+                            -n ${ARGOCD_NAMESPACE} --timeout=300s
+                        """
+                    } else {
+                        echo "Argo CD is already installed in namespace ${ARGOCD_NAMESPACE}, skipping installation."
+                    }
                 }
             }
         }
@@ -211,3 +227,6 @@ pipeline {
     }
 
 }
+
+
+    
