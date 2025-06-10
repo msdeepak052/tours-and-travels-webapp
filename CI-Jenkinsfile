@@ -189,7 +189,7 @@ pipeline {
             success {
                 echo "✅ CI pipeline succeeded. Triggering CD pipeline..."
 
-                build job: 'cd-pipeline',
+                build job: 'tours-and-travels-cd-pipeline',
                     wait: false,
                     parameters: [
                         string(name: 'IMAGE_TAG', value: "${VERSION}"),
