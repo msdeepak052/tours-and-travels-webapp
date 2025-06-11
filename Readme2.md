@@ -127,7 +127,8 @@ module "eks" {
 
 ![image52](https://github.com/user-attachments/assets/5d0265e7-493f-49f3-862f-69d5ec85fa36)
 
-![image44](https://github.com/user-attachments/assets/78381b46-301e-44fc-9882-188668acfc57)
+
+![image45](https://github.com/user-attachments/assets/5e7bcecb-7e04-458c-a46b-ad2987a4f3b8)
 
 
 
