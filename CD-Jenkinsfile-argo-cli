@@ -1,0 +1,223 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'IMAGE_TAG', defaultValue: '1.0.7', description: 'Tag of the Docker image')
+        string(name: 'ECR_REPO', defaultValue: 'app/tour-travels-webapp', description: 'ECR repository name')
+        string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS Region')
+        string(name: 'APP_NAME', defaultValue: 'tours-travels-webapp', description: 'Name of the application')
+    }
+
+    environment {
+        AWS_REGION = "${params.AWS_REGION}"
+        ECR_REPO   = "${params.ECR_REPO}"
+        IMAGE_TAG  = "${params.IMAGE_TAG}"
+        APP_NAME   = "${params.APP_NAME}"
+        KUBECONFIG = "/var/lib/jenkins/.kube/config"
+        ARGOCD_NAMESPACE = "argocd"
+        ARGOCD_VERSION = "v3.0.5"  // Using stable version
+        EKS_CLUSTER_NAME = sh(
+            script: """
+                aws eks list-clusters --region ${AWS_REGION} --query "clusters[?contains(@, 'deepak')]" --output text | head -1
+            """,
+            returnStdout: true
+        ).trim()
+        GIT_REPO = "https://github.com/msdeepak052/tours-and-travels-webapp.git"
+        GIT_PATH = "k8s-app-manifests"
+    }
+
+    stages {
+        stage('Print Parameters') {
+            steps {
+                echo "=== PARAMETERS ==="
+                echo "AWS_REGION: ${AWS_REGION}"
+                echo "ECR_REPO: ${ECR_REPO}"
+                echo "IMAGE_TAG: ${IMAGE_TAG}"
+                echo "APP_NAME: ${APP_NAME}"
+                echo "EKS_CLUSTER_NAME: ${EKS_CLUSTER_NAME}"
+                sh "argocd version --client"
+            }
+        }
+        // stage('Clone GitHub Repository') {
+        //     steps {
+        //         // Clone the repository containing deployment and service files
+        //         git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webpage.git'
+
+        //     }
+        // }
+        stage('Install Argo CD in Cluster') {
+            steps {
+                script {
+                    // Configure kubectl
+                    sh """
+                        aws eks update-kubeconfig \
+                        --name ${EKS_CLUSTER_NAME} \
+                        --region ${AWS_REGION}
+                    """
+
+                    // Create namespace if not exists
+                    sh "kubectl create namespace ${ARGOCD_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -"
+
+                    // Install Argo CD
+                    sh """
+                        kubectl apply -n ${ARGOCD_NAMESPACE} -f \
+                        https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml
+                    """
+
+                    // Wait for Argo CD to be ready
+                    sh """
+                        kubectl wait --for=condition=available deployment/argocd-server \
+                        -n ${ARGOCD_NAMESPACE} --timeout=300s
+                    """
+                }
+            }
+        }
+
+        stage('Configure Argo CD') {
+            steps {
+                script {
+                    // Patch service to LoadBalancer
+                    sh """
+                        kubectl patch svc argocd-server -n ${ARGOCD_NAMESPACE} \
+                        -p '{"spec": {"type": "LoadBalancer"}}'
+                    """
+
+                    // Get admin password
+                    sh """
+                        until kubectl -n ${ARGOCD_NAMESPACE} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d > argocd-admin-password.txt
+                        do
+                            sleep 5
+                            echo "Waiting for Argo CD admin secret..."
+                        done
+                    """
+
+                    // Get server URL
+                    env.ARGOCD_SERVER = sh(
+                        script: """
+                            until kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                            do
+                                sleep 5
+                                echo "Waiting for LoadBalancer hostname..."
+                            done
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    // Correct way to get and echo the password
+                        env.ARGOCD_PASSWORD = sh(
+                            script: 'cat argocd-admin-password.txt',
+                            returnStdout: true
+                        ).trim()
+
+                    // env.ARGOCD_SERVER = sh(
+                    //     script: """
+                    //         timeout 300 bash -c '
+                    //             until hostname=\$(kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath="{.status.loadBalancer.ingress[0].hostname}") && [ -n "\$hostname" ]
+                    //             do
+                    //                 sleep 5
+                    //                 echo "Waiting for LoadBalancer hostname..."
+                    //             done
+                    //             echo "\$hostname"
+                    //         '
+                    //     """,
+                    //     returnStdout: true
+                    // ).trim()
+
+                    echo "Argo CD Server URL: ${env.ARGOCD_SERVER}"
+                    echo "Argo CD Admin Password: ${env.ARGOCD_PASSWORD}"   
+
+
+
+                    // Login to Argo CD
+                    sh """
+                        until argocd login ${env.ARGOCD_SERVER} --grpc-web \
+                        --username admin --password \$(cat argocd-admin-password.txt) \
+                        --insecure
+                        do
+                            sleep 5
+                            echo "Retrying Argo CD login..."
+                        done
+                    """
+
+                    // Add cluster
+                    sh """
+                        argocd cluster add \$(kubectl config current-context) \
+                        --name ${EKS_CLUSTER_NAME} \
+                        --yes
+                    """
+                }
+            }
+        }
+
+        stage('Deploy Application') {
+            steps {
+                script {
+                    // Create application
+                    sh """
+                        argocd app create ${APP_NAME} \
+                        --repo ${GIT_REPO} \
+                        --path ${GIT_PATH} \
+                        --dest-server https://kubernetes.default.svc \
+                        --dest-namespace app-ns \
+                        --sync-policy automated \
+                        --auto-prune \
+                        --revision main \
+                        --upsert
+                    """
+
+                    // Sync and wait
+                    sh """
+                        argocd app sync ${APP_NAME} || true
+                        argocd app wait ${APP_NAME} --health --timeout 300
+                    """
+                }
+            }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                script {
+                    // Get application URL
+                    env.APP_URL = sh(
+                        script: """
+                            kubectl get svc tours-travels-service -n app-ns \
+                            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    // Smoke test
+                    sh """
+                        until curl -s -o /dev/null -w "%{http_code}" http://${env.APP_URL} | grep 200
+                        do
+                            sleep 10
+                            echo "Waiting for application to respond..."
+                        done
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo "=== CLEANUP ==="
+                deleteDir()
+            }
+        }
+        success {
+            script {
+                echo "✅ DEPLOYMENT SUCCESSFUL"
+                echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
+                echo "Application URL: http://${env.APP_URL}"
+            }
+        }
+        failure {
+            script {
+                echo "❌ DEPLOYMENT FAILED"
+                echo "Check logs for details"
+            }
+        }
+    }
+}
