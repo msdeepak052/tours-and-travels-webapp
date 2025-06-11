@@ -1,7 +1,12 @@
 # Tours & Travels WebApp - End-to-End DevOps Implementation
 
-**Author:** Deepak  
+**Author:** Deepak Yadav 
 **GitHub Repository:** [https://github.com/msdeepak052/tours-and-travels-webapp.git](https://github.com/msdeepak052/tours-and-travels-webapp.git)
+
+## Flowchart
+
+![Tours-Travels-Webapp-Flowchart](https://github.com/user-attachments/assets/3e38a396-32b9-4e75-8845-fb97ce53135d)
+
 
 ---
 
@@ -67,3 +72,99 @@ module "eks" {
   subnets         = module.vpc.private_subnets
 }
 ```
+
+## 3. Part 2: CI/CD Pipeline (Jenkins + ArgoCD)
+
+### CI Pipeline Steps
+
+1. **Git Checkout** – Pull latest code from GitHub.
+2. **OWASP Dependency Check** – Security vulnerability scan.
+3. **Maven Build** – Compile Java application.
+4. **SonarQube Scan** – Code quality & security analysis.
+5. **Nexus Upload** – Store the `.jar` artifact.
+6. **Docker Build** – Create a containerized image.
+7. **Trivy Scan** – Security scan for Docker image.
+8. **Push to ECR** – Store the image in AWS ECR.
+9. **Trigger CD Pipeline** – Notify ArgoCD for deployment.
+
+---
+
+### CD Pipeline (GitOps with ArgoCD)
+
+- **Git Checkout (Manifests Repo):** Updates Kubernetes YAML files.
+- **ArgoCD Sync:** Automatically applies changes to EKS.
+- **Deploy to Kubernetes:** Pods, Services, Ingress are deployed.
+
+---
+
+#### Why ArgoCD?
+
+- **Declarative GitOps:** Manifests stored in Git.
+- **Auto-Sync:** Detects changes and applies them.
+- **Rollback Capability:** Reverts to previous stable versions.
+
+---
+
+### Screenshots
+
+![image57](https://github.com/user-attachments/assets/ca099378-6104-4db5-bc51-bd490b7fa106)
+
+![image53](https://github.com/user-attachments/assets/6612aa6a-b725-420c-b3ca-8870068314da)
+
+
+![image54](https://github.com/user-attachments/assets/a82d928e-cc00-4073-93fc-b040ce7599d4)
+
+
+![image55](https://github.com/user-attachments/assets/82920db9-073a-4744-9610-424358123541)
+
+
+![image56](https://github.com/user-attachments/assets/18640a0b-6b84-4eb2-b997-43632d7615f2)
+
+
+
+## 4. Part 3: Monitoring & Enhancements
+
+### a. Prometheus & Grafana
+
+- **Prometheus:** Collects metrics from Kubernetes.
+- **Grafana:** Visualizes metrics (CPU, Memory, HTTP Requests).
+- **Alerts:** Set up for pod failures or high latency.
+
+### b. Jenkins Email Notifications
+
+- **Success/Failure Alerts:** Sent via SMTP (Gmail/Amazon SES).
+- **Pipeline Status:** Immediate feedback on build results.
+
+### c. Route 53 + Ingress for DNS
+
+- **Route 53:** Domain management (e.g., tours-travels.example.com).
+- **Ingress Controller (NGINX):** Routes traffic to Kubernetes services.
+
+---
+
+## 5. Conclusion & Learnings
+
+### Key Takeaways
+
+- ✔ **Infrastructure Automation:** Terraform made AWS setup repeatable.
+- ✔ **Security Integration:** OWASP, Trivy, SonarQube improved code safety.
+- ✔ **GitOps with ArgoCD:** Simplified Kubernetes deployments.
+- ✔ **Monitoring:** Proactive issue detection with Prometheus/Grafana.
+
+### Future Improvements
+
+- **Auto-Scaling:** Based on traffic using KEDA.
+- **Chaos Engineering:** Test resilience with Chaos Mesh.
+- **Multi-Region Deployment:** For high availability.
+
+---
+
+## GitHub Repository
+
+🔗 [https://github.com/msdeepak052/tours-and-travels-webapp.git](https://github.com/msdeepak052/tours-and-travels-webapp.git)
+
+---
+
+This documentation highlights the end-to-end DevOps implementation, showcasing infrastructure automation, CI/CD security, GitOps, and monitoring.
+
+🚀 **Happy DevOps Journey!** 🚀
