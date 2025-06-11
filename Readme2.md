@@ -122,6 +122,15 @@ module "eks" {
 
 
 
+![image51](https://github.com/user-attachments/assets/7ec20d40-a5c2-4ae1-a715-d1548460de59)
+
+
+![image52](https://github.com/user-attachments/assets/5d0265e7-493f-49f3-862f-69d5ec85fa36)
+
+![image44](https://github.com/user-attachments/assets/78381b46-301e-44fc-9882-188668acfc57)
+
+
+
 ## 4. Part 3: Monitoring & Enhancements
 
 ### a. Prometheus & Grafana
