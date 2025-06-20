@@ -200,6 +200,115 @@ pipeline {
                 }
             }
         }
+
+        stage("Install AWS Load Balancer Controller") {
+            steps {
+                script {
+                    // Verify Helm is installed
+                    def helmInstalled = sh(
+                        script: 'helm version --short >/dev/null 2>&1 && echo "true" || echo "false"',
+                        returnStdout: true
+                    ).trim()
+                    
+                    if (helmInstalled == "false") {
+                        sh """
+                            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                        """
+                    }
+
+                    // Check if AWS Load Balancer Controller is already installed via Helm
+                    def albControllerInstalled = sh(
+                        script: """
+                            if helm status aws-load-balancer-controller -n kube-system >/dev/null 2>&1; then
+                                echo "true"
+                            else
+                                echo "false"
+                            fi
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    if (albControllerInstalled == "true") {
+                        echo "AWS Load Balancer Controller is already installed via Helm."
+                    } else {
+                        echo "Installing AWS Load Balancer Controller..."
+                        
+                        // Add EKS Helm repository
+                        sh """
+                            helm repo add eks https://aws.github.io/eks-charts || true
+                            helm repo update
+                        """
+                        
+                        // Install the AWS Load Balancer Controller
+                        sh """
+                            # Create IAM policy if not exists
+                            POLICY_ARN=\$(aws iam list-policies --query 'Policies[?PolicyName==\'AWSLoadBalancerControllerIAMPolicy\'].Arn' --output text)
+                            if [ -z "\$POLICY_ARN" ]; then
+                                curl -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.4.7/docs/install/iam_policy.json
+                                POLICY_ARN=\$(aws iam create-policy \
+                                    --policy-name AWSLoadBalancerControllerIAMPolicy \
+                                    --policy-document file://iam-policy.json \
+                                    --query 'Policy.Arn' --output text)
+                            fi
+                            
+                            # Create IAM role and service account
+                            eksctl create iamserviceaccount \
+                            --cluster=${EKS_CLUSTER_NAME} \
+                            --namespace=kube-system \
+                            --name=aws-load-balancer-controller \
+                            --attach-policy-arn=\$POLICY_ARN \
+                            --override-existing-serviceaccounts \
+                            --region ${AWS_REGION} \
+                            --approve
+                            
+                            # Install the Helm chart
+                            helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+                            -n kube-system \
+                            --set clusterName=${EKS_CLUSTER_NAME} \
+                            --set serviceAccount.create=false \
+                            --set serviceAccount.name=aws-load-balancer-controller
+                        """
+                    }
+
+                    // Final verification using kubectl (runs in both cases)
+                    echo "Verifying AWS Load Balancer Controller installation..."
+                    def albControllerStatus = sh(
+                        script: """
+                            # Check deployment status
+                            kubectl get deployment aws-load-balancer-controller -n kube-system -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0"
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    if (albControllerStatus == "1") {
+                        echo "✅ AWS Load Balancer Controller is running and healthy"
+                        // Get controller version for verification
+                        def albVersion = sh(
+                            script: """
+                                kubectl get deployment aws-load-balancer-controller -n kube-system \
+                                -o jsonpath='{.spec.template.spec.containers[0].image}' | awk -F: '{print \$NF}'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        echo "Controller version: ${albVersion}"
+                    } else {
+                        echo "❌ AWS Load Balancer Controller is not running properly"
+                        // Get more detailed status information
+                        sh """
+                            echo "=== Deployment Status ==="
+                            kubectl get deployment aws-load-balancer-controller -n kube-system
+                            
+                            echo "=== Pod Status ==="
+                            kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
+                            
+                            echo "=== Pod Logs ==="
+                            kubectl logs -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller --tail=50 || true
+                        """
+                        error("AWS Load Balancer Controller verification failed")
+                    }
+                }
+            }
+        }
                 
                 stage("Image Tag update in Kubernetes manifests") {
                     steps {
