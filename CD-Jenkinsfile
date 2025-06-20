@@ -147,7 +147,6 @@ pipeline {
                         """
                     }
                     
-                    // Check if Prometheus Stack is already installed
                     def monitoringInstalled = sh(
                         script: """
                             if helm status kube-prometheus-stack -n monitoring >/dev/null 2>&1; then
@@ -160,7 +159,7 @@ pipeline {
                     ).trim()
                     
                     if (monitoringInstalled == "true") {
-                        echo "Prometheus and Grafana are already installed in the cluster, skipping installation."
+                        echo "Prometheus and Grafana are already installed, skipping installation."
                     } else {
                         echo "Installing Prometheus and Grafana..."
                         sh """
@@ -180,9 +179,9 @@ pipeline {
                                 --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
                                 --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false
                             
-                            # Wait for services to be ready
+                            # Wait for Grafana deployment (Prometheus is a StatefulSet)
                             kubectl wait --for=condition=available deployment/kube-prometheus-stack-grafana -n monitoring --timeout=300s
-                            kubectl wait --for=condition=available deployment/kube-prometheus-stack-prometheus -n monitoring --timeout=300s
+                            kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=300s
                             
                             # Get Grafana admin password
                             env.GRAFANA_PASSWORD = \$(kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
