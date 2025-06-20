@@ -4,6 +4,7 @@ metadata:
   name: monitoring-ingress
   namespace: monitoring
   annotations:
+    alb.ingress.kubernetes.io/group.name: shared-ingress
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
