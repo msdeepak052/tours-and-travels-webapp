@@ -4,7 +4,7 @@ metadata:
   name: tours-travels-service
   namespace: app-ns
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app: tours-travels-webapp
   ports:
