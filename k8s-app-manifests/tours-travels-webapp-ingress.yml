@@ -30,7 +30,7 @@ spec:
         backend:
           service:
             name: kube-prometheus-stack-grafana
-            namespace: monitoring
+            namespace: monitoringg
             port:
               number: 80
   - host: prometheus.devopswithdeepak.co.in
