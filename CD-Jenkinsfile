@@ -17,6 +17,7 @@ pipeline {
         KUBECONFIG = "/var/lib/jenkins/.kube/config"
         ARGOCD_NAMESPACE = "argocd"
         ARGOCD_VERSION = "v3.0.5"
+        AWS_ACCOUNT_ID = sh(script: "aws sts get-caller-identity --query Account --output text", returnStdout: true).trim()
         EKS_CLUSTER_NAME = sh(
             script: """
                 aws eks list-clusters --region ${AWS_REGION} --query "clusters[?contains(@, 'deepak')]" --output text | head -1
@@ -243,9 +244,15 @@ pipeline {
             }
         }
 
-        stage("Install AWS Load Balancer Controller and Ingress") {
+       stage("Install AWS Load Balancer Controller and Ingress") {
             steps {
                 script {
+                    // Get AWS account ID
+                    env.AWS_ACCOUNT_ID = sh(
+                        script: "aws sts get-caller-identity --query Account --output text",
+                        returnStdout: true
+                    ).trim()
+                    
                     // Check if AWS Load Balancer Controller is already installed via Helm
                     def albControllerInstalled = sh(
                         script: """
@@ -261,20 +268,29 @@ pipeline {
                     if (albControllerInstalled == "true") {
                         echo "AWS Load Balancer Controller is already installed via Helm."
                         
-                        // Verify and add missing permissions if needed
+                        // =============================================
+                        // FIXED: Using custom policy instead of AWS-managed
+                        // =============================================
                         sh """
-                            # Check if the policy has DescribeRouteTables permission
-                            if ! aws iam get-policy-version --policy-arn arn:aws:iam::aws:policy/AWSLoadBalancerControllerIAMPolicy --version-id v1 | grep DescribeRouteTables; then
-                                echo "Updating IAM policy with missing permissions..."
-                                curl -s -o updated-iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
-                                aws iam create-policy-version \\
-                                    --policy-arn arn:aws:iam::aws:policy/AWSLoadBalancerControllerIAMPolicy \\
-                                    --policy-document file://updated-iam-policy.json \\
-                                    --set-as-default \\
+                            # Create custom policy if it doesn't exist
+                            if ! aws iam get-policy --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/ALBControllerCustomPolicy --region ${AWS_REGION} >/dev/null 2>&1; then
+                                echo "Creating custom IAM policy..."
+                                curl -s -o alb-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+                                aws iam create-policy \\
+                                    --policy-name ALBControllerCustomPolicy \\
+                                    --policy-document file://alb-policy.json \\
                                     --region ${AWS_REGION}
-                                rm -f updated-iam-policy.json
+                                rm -f alb-policy.json
                             fi
+                            
+                            # Attach custom policy to the role
+                            aws iam attach-role-policy \\
+                                --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/ALBControllerCustomPolicy \\
+                                --role-name eksctl-deepak-project1-cluster-addon-iamservi-Role1-oSbFXg8JipNM \\
+                                --region ${AWS_REGION} || true
                         """
+                        // =============================================
+                        
                     } else {
                         echo "Installing AWS Load Balancer Controller..."
         
@@ -292,62 +308,45 @@ pipeline {
                             helm repo update
                         """
         
-                        // Use the latest IAM policy from GitHub
+                        // =============================================
+                        // FIXED: Create and use custom policy
+                        // =============================================
                         sh """
-                            curl -s -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+                            # Download latest ALB controller policy
+                            curl -s -o alb-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+                            
+                            # Create custom policy
+                            aws iam create-policy \\
+                                --policy-name ALBControllerCustomPolicy \\
+                                --policy-document file://alb-policy.json \\
+                                --region ${AWS_REGION}
+                            rm -f alb-policy.json
                         """
-        
-                        // Create or update IAM policy
+                        
+                        // Get custom policy ARN
                         def policyArn = sh(
                             script: """
                                 aws iam list-policies \\
-                                    --query "Policies[?PolicyName=='AWSLoadBalancerControllerIAMPolicy'].Arn" \\
+                                    --query "Policies[?PolicyName=='ALBControllerCustomPolicy'].Arn" \\
                                     --output text --region ${AWS_REGION}
                             """,
                             returnStdout: true
                         ).trim()
+                        // =============================================
         
-                        if (!policyArn) {
-                            echo "Creating IAM policy..."
-                            sh """
-                                aws iam create-policy \\
-                                    --policy-name AWSLoadBalancerControllerIAMPolicy \\
-                                    --policy-document file://iam-policy.json \\
-                                    --region ${AWS_REGION}
-                            """
-                            policyArn = sh(
-                                script: """
-                                    aws iam list-policies \\
-                                        --query "Policies[?PolicyName=='AWSLoadBalancerControllerIAMPolicy'].Arn" \\
-                                        --output text --region ${AWS_REGION}
-                                """,
-                                returnStdout: true
-                            ).trim()
-                        } else {
-                            echo "Updating existing IAM policy..."
-                            sh """
-                                aws iam create-policy-version \\
-                                    --policy-arn ${policyArn} \\
-                                    --policy-document file://iam-policy.json \\
-                                    --set-as-default \\
-                                    --region ${AWS_REGION}
-                            """
-                        }
-        
-                        // Create IAM role and service account with additional permissions
+                        // Create IAM role and service account
                         sh """
                             eksctl create iamserviceaccount \\
                                 --cluster=${EKS_CLUSTER_NAME} \\
                                 --namespace=kube-system \\
                                 --name=aws-load-balancer-controller \\
                                 --attach-policy-arn=${policyArn} \\
-                                --attach-policy-arn=arn:aws:iam::aws:policy/AmazonEC2FullAccess \\
                                 --override-existing-serviceaccounts \\
                                 --region ${AWS_REGION} \\
                                 --approve
                         """
         
-                        // Install the Helm chart with latest version
+                        // Install the Helm chart
                         sh """
                             helm install aws-load-balancer-controller eks/aws-load-balancer-controller \\
                                 -n kube-system \\
@@ -361,7 +360,7 @@ pipeline {
                         """
                     }
         
-                    // Wait until ready with better error handling
+                    // Wait until ready
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil {
                             try {
@@ -379,13 +378,13 @@ pipeline {
                         }
                     }
         
-                    // Verify controller logs for any issues
+                    // Verify controller logs
                     sh """
                         echo "=== Controller Logs ==="
                         kubectl logs -n kube-system deployment/aws-load-balancer-controller --tail=50 || true
                     """
         
-                    // Get version and status information
+                    // Get version information
                     def albVersion = sh(
                         script: """
                             kubectl get deployment aws-load-balancer-controller -n kube-system \\
@@ -397,7 +396,7 @@ pipeline {
                     echo "✅ AWS Load Balancer Controller is running and healthy"
                     echo "Controller version: ${albVersion}"
         
-                    // Display detailed controller information
+                    // Display detailed information
                     sh """
                         echo "=== Controller Deployment Status ==="
                         kubectl get deployment aws-load-balancer-controller -n kube-system -o wide
@@ -414,7 +413,6 @@ pipeline {
                 }
             }
         }
-
         stage("Image Tag update in Kubernetes manifests") {
             steps {
                 script {
