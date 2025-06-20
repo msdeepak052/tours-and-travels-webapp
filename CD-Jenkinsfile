@@ -302,15 +302,19 @@ pipeline {
                         
                         // Create IAM policy if not exists
                         sh """
-                            POLICY_ARN=\$(aws iam list-policies --query 'Policies[?PolicyName==\\'AWSLoadBalancerControllerIAMPolicy\\'].Arn' --output text)
+                            POLICY_NAME="AWSLoadBalancerControllerIAMPolicy"
+                            POLICY_ARN=\$(aws iam list-policies --query "Policies[?PolicyName=='\$POLICY_NAME'].Arn" --output text --region ${AWS_REGION})
                             if [ -z "\$POLICY_ARN" ]; then
+                                echo "Policy not found. Creating policy..."
                                 curl -s -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.4.7/docs/install/iam_policy.json
-                                POLICY_ARN=\$(aws iam create-policy \\
-                                    --policy-name AWSLoadBalancerControllerIAMPolicy \\
-                                    --policy-document file://iam-policy.json \\
+                                POLICY_ARN=\$(aws iam create-policy \
+                                    --policy-name \$POLICY_NAME \
+                                    --policy-document file://iam-policy.json \
+                                    --region ${AWS_REGION} \
                                     --query 'Policy.Arn' --output text)
                                 rm -f iam-policy.json
                             fi
+                            echo "Using policy ARN: \$POLICY_ARN"
                         """
                         
                         // Create IAM role and service account with retry logic
