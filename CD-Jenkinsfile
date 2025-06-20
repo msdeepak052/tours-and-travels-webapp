@@ -392,15 +392,28 @@ pipeline {
             }
         }
 
-        stage("Commit code changes and push to GitHub"){
-            steps{
-                script{
+        stage("Commit code changes and push to GitHub") {
+            steps {
+                script {
                     withCredentials([gitUsernamePassword(credentialsId: 'githubCreds', gitToolName: 'Default')]) {
-                        sh """
-                            git add .
-                            git commit -m "Updated Image Tag in Kubernetes manifests to ${env.ECR_IMAGE_NAME} and set services to ClusterIP"
-                            git push https://github.com/msdeepak052/tours-and-travels-webapp.git main
-                        """
+                        // Check if there are any changes to commit
+                        def changes = sh(
+                            script: """
+                                git status --porcelain
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (changes) {
+                            echo "Changes detected, committing and pushing..."
+                            sh """
+                                git add .
+                                git commit -m "Updated Image Tag in Kubernetes manifests to ${env.ECR_IMAGE_NAME} and set services to ClusterIP"
+                                git push https://github.com/msdeepak052/tours-and-travels-webapp.git main
+                            """
+                        } else {
+                            echo "No changes detected, skipping commit."
+                        }
                     }
                 }
             }
