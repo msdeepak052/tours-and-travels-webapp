@@ -19,6 +19,7 @@ spec:
         backend:
           service:
             name: tours-travels-service
+            namespace: app-ns
             port:
               number: 80
   - host: grafana.devopswithdeepak.co.in
@@ -29,6 +30,7 @@ spec:
         backend:
           service:
             name: kube-prometheus-stack-grafana
+            namespace: monitoring
             port:
               number: 80
   - host: prometheus.devopswithdeepak.co.in
@@ -39,6 +41,7 @@ spec:
         backend:
           service:
             name: kube-prometheus-stack-prometheus
+            namespace: monitoring
             port:
               number: 9090
   - host: argocd.devopswithdeepak.co.in
@@ -49,5 +52,6 @@ spec:
         backend:
           service:
             name: argocd-server
+            namespace: argocd
             port:
               number: 80
