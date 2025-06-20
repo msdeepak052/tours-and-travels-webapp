@@ -178,11 +178,27 @@ pipeline {
                         echo "Prometheus and Grafana are already installed, skipping installation."
                         
                         // Still get the URLs and password for reference
-                        sh """
-                            env.GRAFANA_PASSWORD = \$(kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
-                            env.GRAFANA_URL = \$(kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-                            env.PROMETHEUS_URL = \$(kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-                        """
+                        env.GRAFANA_PASSWORD = sh(
+                            script: """
+                                kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        env.GRAFANA_URL = sh(
+                            script: """
+                                kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        env.PROMETHEUS_URL = sh(
+                            script: """
+                                kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
                         echo "Grafana URL: http://${env.GRAFANA_URL}"
                         echo "Prometheus URL: http://${env.PROMETHEUS_URL}"
                     } else {
@@ -223,14 +239,29 @@ pipeline {
                             # Wait for Grafana deployment (Prometheus is a StatefulSet)
                             kubectl wait --for=condition=available deployment/kube-prometheus-stack-grafana -n monitoring --timeout=300s
                             kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=300s
-                            
-                            # Get Grafana admin password
-                            env.GRAFANA_PASSWORD = \$(kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
-                            
-                            # Get service URLs
-                            env.GRAFANA_URL = \$(kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-                            env.PROMETHEUS_URL = \$(kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
                         """
+                        
+                        // Set environment variables properly
+                        env.GRAFANA_PASSWORD = sh(
+                            script: """
+                                kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        env.GRAFANA_URL = sh(
+                            script: """
+                                kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        env.PROMETHEUS_URL = sh(
+                            script: """
+                                kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                            """,
+                            returnStdout: true
+                        ).trim()
                         
                         echo "Grafana URL: http://${env.GRAFANA_URL}"
                         echo "Grafana Username: admin"
