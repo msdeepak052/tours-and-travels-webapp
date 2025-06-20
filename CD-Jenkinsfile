@@ -7,6 +7,11 @@ pipeline {
         string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS Region')
         string(name: 'APP_NAME', defaultValue: 'tours-travels-webapp', description: 'Name of the application')
         booleanParam(name: 'FORCE_REINSTALL_MONITORING', defaultValue: true, description: 'Force reinstall monitoring stack')
+        choice(
+            name: 'ALB_CONTROLLER_ACTION',
+            choices: ['install', 'uninstall'],
+            description: 'Choose whether to install or uninstall the AWS Load Balancer Controller'
+        )
     }
 
     environment {
@@ -244,172 +249,113 @@ pipeline {
             }
         }
 
-       stage("Install AWS Load Balancer Controller and Ingress") {
+      stage("AWS Load Balancer Controller Setup") {
             steps {
                 script {
-                    // Get AWS account ID
-                    env.AWS_ACCOUNT_ID = sh(
-                        script: "aws sts get-caller-identity --query Account --output text",
-                        returnStdout: true
-                    ).trim()
+                    def albAction = params.ALB_CONTROLLER_ACTION ?: 'install'
                     
-                    // Check if AWS Load Balancer Controller is already installed via Helm
-                    def albControllerInstalled = sh(
-                        script: """
-                            if helm status aws-load-balancer-controller -n kube-system >/dev/null 2>&1; then
-                                echo "true"
-                            else
-                                echo "false"
-                            fi
-                        """,
-                        returnStdout: true
-                    ).trim()
-        
-                    if (albControllerInstalled == "true") {
-                        echo "AWS Load Balancer Controller is already installed via Helm."
-                        
-                        // =============================================
-                        // FIXED: Using custom policy instead of AWS-managed
-                        // =============================================
+                    if (albAction == 'uninstall') {
+                        echo "Uninstalling AWS Load Balancer Controller..."
                         sh """
-                            # Create custom policy if it doesn't exist
-                            if ! aws iam get-policy --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/ALBControllerCustomPolicy --region ${AWS_REGION} >/dev/null 2>&1; then
-                                echo "Creating custom IAM policy..."
-                                curl -s -o alb-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
-                                aws iam create-policy \\
-                                    --policy-name ALBControllerCustomPolicy \\
-                                    --policy-document file://alb-policy.json \\
-                                    --region ${AWS_REGION}
-                                rm -f alb-policy.json
-                            fi
-                            
-                            # Attach custom policy to the role
-                            aws iam attach-role-policy \\
-                                --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/ALBControllerCustomPolicy \\
-                                --role-name eksctl-deepak-project1-cluster-addon-iamservi-Role1-oSbFXg8JipNM \\
-                                --region ${AWS_REGION} || true
-                        """
-                        // =============================================
-                        
-                    } else {
-                        echo "Installing AWS Load Balancer Controller..."
-        
-                        // Associate IAM OIDC provider
-                        sh """
-                            eksctl utils associate-iam-oidc-provider \\
-                                --cluster ${EKS_CLUSTER_NAME} \\
-                                --region ${AWS_REGION} \\
-                                --approve
-                        """
-        
-                        // Add EKS Helm repository
-                        sh """
-                            helm repo add eks https://aws.github.io/eks-charts || true
-                            helm repo update
-                        """
-        
-                        // =============================================
-                        // FIXED: Create and use custom policy
-                        // =============================================
-                        sh """
-                            # Download latest ALB controller policy
-                            curl -s -o alb-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
-                            
-                            # Create custom policy
-                            aws iam create-policy \\
-                                --policy-name ALBControllerCustomPolicy \\
-                                --policy-document file://alb-policy.json \\
-                                --region ${AWS_REGION}
-                            rm -f alb-policy.json
-                        """
-                        
-                        // Get custom policy ARN
-                        def policyArn = sh(
-                            script: """
-                                aws iam list-policies \\
-                                    --query "Policies[?PolicyName=='ALBControllerCustomPolicy'].Arn" \\
-                                    --output text --region ${AWS_REGION}
-                            """,
-                            returnStdout: true
-                        ).trim()
-                        // =============================================
-        
-                        // Create IAM role and service account
-                        sh """
-                            eksctl create iamserviceaccount \\
+                            helm uninstall aws-load-balancer-controller -n kube-system || true
+                            eksctl delete iamserviceaccount \\
                                 --cluster=${EKS_CLUSTER_NAME} \\
                                 --namespace=kube-system \\
                                 --name=aws-load-balancer-controller \\
-                                --attach-policy-arn=${policyArn} \\
-                                --override-existing-serviceaccounts \\
-                                --region ${AWS_REGION} \\
-                                --approve
+                                --region ${AWS_REGION} || true
                         """
-        
-                        // Install the Helm chart
-                        sh """
-                            helm install aws-load-balancer-controller eks/aws-load-balancer-controller \\
-                                -n kube-system \\
-                                --version 1.5.4 \\
-                                --set clusterName=${EKS_CLUSTER_NAME} \\
-                                --set serviceAccount.create=false \\
-                                --set serviceAccount.name=aws-load-balancer-controller \\
-                                --set extraEnvVars[0].name=AWS_REGION \\
-                                --set extraEnvVars[0].value=${AWS_REGION} \\
-                                --wait
-                        """
-                    }
-        
-                    // Wait until ready
-                    timeout(time: 5, unit: 'MINUTES') {
-                        waitUntil {
-                            try {
-                                def status = sh(
-                                    script: """
-                                        kubectl get deployment aws-load-balancer-controller -n kube-system -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0"
-                                    """,
-                                    returnStdout: true
-                                ).trim()
-                                return status.isInteger() && status.toInteger() >= 1
-                            } catch (Exception e) {
-                                echo "Waiting for controller to become ready..."
-                                return false
+                        echo "✅ AWS Load Balancer Controller uninstalled"
+                    } else {
+                        // Check if controller is already installed and healthy
+                        def controllerStatus = sh(
+                            script: """
+                                kubectl get deployment aws-load-balancer-controller -n kube-system -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0"
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (controllerStatus == "2") {
+                            echo "AWS Load Balancer Controller is already installed and healthy. Skipping installation."
+                        } else {
+                            echo "Installing/Updating AWS Load Balancer Controller..."
+                            
+                            // Download the official IAM policy
+                            sh """
+                                curl -s -o alb-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
+                            """
+                            
+                            // Create or update IAM policy
+                            sh """
+                                if ! aws iam get-policy --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/ALBControllerPolicy --region ${AWS_REGION} >/dev/null 2>&1; then
+                                    aws iam create-policy \\
+                                        --policy-name ALBControllerPolicy \\
+                                        --policy-document file://alb-policy.json \\
+                                        --region ${AWS_REGION}
+                                else
+                                    aws iam create-policy-version \\
+                                        --policy-arn arn:aws:iam::${AWS_ACCOUNT_ID}:policy/ALBControllerPolicy \\
+                                        --policy-document file://alb-policy.json \\
+                                        --set-as-default \\
+                                        --region ${AWS_REGION}
+                                fi
+                            """
+                            
+                            // Get policy ARN
+                            def policyArn = sh(
+                                script: """
+                                    aws iam list-policies \\
+                                        --query "Policies[?PolicyName=='ALBControllerPolicy'].Arn" \\
+                                        --output text --region ${AWS_REGION}
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            
+                            // Create or update IAM service account
+                            sh """
+                                eksctl create iamserviceaccount \\
+                                    --cluster=${EKS_CLUSTER_NAME} \\
+                                    --namespace=kube-system \\
+                                    --name=aws-load-balancer-controller \\
+                                    --attach-policy-arn=${policyArn} \\
+                                    --override-existing-serviceaccounts \\
+                                    --region ${AWS_REGION} \\
+                                    --approve
+                            """
+                            
+                            // Install or upgrade Helm chart
+                            sh """
+                                helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \\
+                                    -n kube-system \\
+                                    --version 1.5.4 \\
+                                    --set clusterName=${EKS_CLUSTER_NAME} \\
+                                    --set serviceAccount.create=false \\
+                                    --set serviceAccount.name=aws-load-balancer-controller \\
+                                    --set extraEnvVars[0].name=AWS_REGION \\
+                                    --set extraEnvVars[0].value=${AWS_REGION} \\
+                                    --wait
+                            """
+                            
+                            // Verify installation
+                            timeout(time: 5, unit: 'MINUTES') {
+                                waitUntil {
+                                    try {
+                                        def status = sh(
+                                            script: """
+                                                kubectl get deployment aws-load-balancer-controller -n kube-system -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0"
+                                            """,
+                                            returnStdout: true
+                                        ).trim()
+                                        return status.isInteger() && status.toInteger() >= 1
+                                    } catch (Exception e) {
+                                        echo "Waiting for controller to become ready..."
+                                        return false
+                                    }
+                                }
                             }
+                            
+                            echo "✅ AWS Load Balancer Controller installed/updated successfully"
                         }
                     }
-        
-                    // Verify controller logs
-                    sh """
-                        echo "=== Controller Logs ==="
-                        kubectl logs -n kube-system deployment/aws-load-balancer-controller --tail=50 || true
-                    """
-        
-                    // Get version information
-                    def albVersion = sh(
-                        script: """
-                            kubectl get deployment aws-load-balancer-controller -n kube-system \\
-                            -o jsonpath='{.spec.template.spec.containers[0].image}' | awk -F: '{print \$NF}'
-                        """,
-                        returnStdout: true
-                    ).trim()
-        
-                    echo "✅ AWS Load Balancer Controller is running and healthy"
-                    echo "Controller version: ${albVersion}"
-        
-                    // Display detailed information
-                    sh """
-                        echo "=== Controller Deployment Status ==="
-                        kubectl get deployment aws-load-balancer-controller -n kube-system -o wide
-        
-                        echo "=== Controller Pods ==="
-                        kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller -o wide
-        
-                        echo "=== Service Account ==="
-                        kubectl get serviceaccount aws-load-balancer-controller -n kube-system -o yaml
-        
-                        echo "=== IAM Role Annotations ==="
-                        kubectl describe serviceaccount aws-load-balancer-controller -n kube-system | grep Annotations
-                    """
                 }
             }
         }
