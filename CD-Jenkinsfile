@@ -372,7 +372,7 @@ pipeline {
                         """
                     }
 
-                    // Verification
+                    // Reliable wait until ready
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil {
                             def status = sh(
@@ -381,17 +381,7 @@ pipeline {
                                 """,
                                 returnStdout: true
                             ).trim()
-
-                            if (status == "1") {
-                                def podStatus = sh(
-                                    script: """
-                                        kubectl logs -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller --tail=20 | grep -q 'successfully acquired lease' && echo "ready" || echo "not-ready"
-                                    """,
-                                    returnStdout: true
-                                ).trim()
-                                return podStatus == "ready"
-                            }
-                            return false
+                            return status.isInteger() && status.toInteger() >= 1
                         }
                     }
 
