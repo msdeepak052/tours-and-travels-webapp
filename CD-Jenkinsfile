@@ -6,7 +6,7 @@ pipeline {
         string(name: 'ECR_REPO', defaultValue: 'app/tour-travels-webapp', description: 'ECR repository name')
         string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS Region')
         string(name: 'APP_NAME', defaultValue: 'tours-travels-webapp', description: 'Name of the application')
-        booleanParam(name: 'FORCE_REINSTALL_MONITORING', defaultValue: true, description: 'Force reinstall monitoring stack')
+        booleanParam(name: 'FORCE_REINSTALL_MONITORING', defaultValue: false, description: 'Force reinstall monitoring stack')
         choice(
             name: 'ALB_CONTROLLER_ACTION',
             choices: ['install', 'uninstall'],
