@@ -200,22 +200,50 @@ pipeline {
                 deleteDir()
             }
         }
+    // success {
+    //     script {
+    //         // Get the application URL from the LoadBalancer service
+    //         env.APP_URL = sh(
+    //             script: """
+    //                 kubectl get service tours-travels-service -n app-ns -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+    //             """,
+    //             returnStdout: true
+    //         ).trim()
+            
+    //         echo "✅ DEPLOYMENT SUCCESSFUL"
+    //         echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
+    //         echo "Application URL: http://${env.APP_URL}"
+            
+    //         // If you want clickable links in Jenkins console:
+    //         echo "Application URL: <a href='http://${env.APP_URL}'>http://${env.APP_URL}</a>"
+    //     }
+    // }
     success {
         script {
-            // Get the application URL from the LoadBalancer service
-            env.APP_URL = sh(
+            // Safely get application URL (won't fail if service/namespace doesn't exist)
+            def appUrl = sh(
                 script: """
-                    kubectl get service tours-travels-service -n app-ns -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+                    kubectl get service tours-travels-service -n app-ns -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo ""
                 """,
                 returnStdout: true
             ).trim()
-            
+
+            // Set APP_URL only if we got a valid value
+            if (appUrl) {
+                env.APP_URL = appUrl
+                echo "Application URL: <a href='http://${env.APP_URL}'>http://${env.APP_URL}</a>"
+            } else {
+                echo "ℹ️ Service/Namspace not found - No application URL available"
+            }
+
             echo "✅ DEPLOYMENT SUCCESSFUL"
-            echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
-            echo "Application URL: http://${env.APP_URL}"
+            echo "Argo CD Dashboard: <a href='http://${env.ARGOCD_SERVER}'>http://${env.ARGOCD_SERVER}</a>"
             
-            // If you want clickable links in Jenkins console:
-            echo "Application URL: <a href='http://${env.APP_URL}'>http://${env.APP_URL}</a>"
+            // For email notifications or other uses where you still want the raw URL:
+            echo "Raw Argo CD URL: http://${env.ARGOCD_SERVER}"
+            if (appUrl) {
+                echo "Raw Application URL: http://${env.APP_URL}"
+            }
         }
     }
         failure {
@@ -227,6 +255,3 @@ pipeline {
     }
 
 }
-
-
-    
