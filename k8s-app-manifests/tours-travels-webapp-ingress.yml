@@ -1,57 +1,66 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: host-based-ingress
-  namespace: default
   annotations:
+    alb.ingress.kubernetes.io/group.name: deepak-travel-app
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
-    alb.ingress.kubernetes.io/group.name: deepak-travel-app
+    argocd.argoproj.io/tracking-id: tours-travels-app:networking.k8s.io/Ingress:default/host-based-ingress
+  creationTimestamp: '2025-06-20T21:55:45Z'
+  finalizers:
+    - group.ingress.k8s.aws/deepak-travel-app
+  generation: 1
+  name: host-based-ingress
+  namespace: default
+  resourceVersion: '118112'
+  uid: 2f26f6ef-7844-4ab2-b772-55edfbfe1e89
 spec:
   ingressClassName: alb
   rules:
-  - host: app.devopswithdeepak.co.in
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: tours-travels-service
-            namespace: app-ns
-            port:
-              number: 80
-  - host: grafana.devopswithdeepak.co.in
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: kube-prometheus-stack-grafana
-            namespace: monitoringg
-            port:
-              number: 80
-  - host: prometheus.devopswithdeepak.co.in
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: kube-prometheus-stack-prometheus
-            namespace: monitoring
-            port:
-              number: 9090
-  - host: argocd.devopswithdeepak.co.in
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: argocd-server
-            namespace: argocd
-            port:
-              number: 80
+    - host: app.devopswithdeepak.co.in
+      http:
+        paths:
+          - backend:
+              service:
+                name: tours-travels-service
+                namespace: app-ns
+                port:
+                  number: 80
+            path: /
+            pathType: Prefix
+    - host: grafana.devopswithdeepak.co.in
+      http:
+        paths:
+          - backend:
+              service:
+                name: kube-prometheus-stack-grafana
+                namespace: monitoring
+                port:
+                  number: 80
+            path: /
+            pathType: Prefix
+    - host: prometheus.devopswithdeepak.co.in
+      http:
+        paths:
+          - backend:
+              service:
+                name: kube-prometheus-stack-prometheus
+                namespace: monitoring
+                port:
+                  number: 9090
+            path: /
+            pathType: Prefix
+    - host: argocd.devopswithdeepak.co.in
+      http:
+        paths:
+          - backend:
+              service:
+                name: argocd-server
+                namespace: argocd
+                port:
+                  number: 80
+            path: /
+            pathType: Prefix
+status:
+  loadBalancer: {}
