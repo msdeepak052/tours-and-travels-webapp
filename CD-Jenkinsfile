@@ -94,11 +94,24 @@ pipeline {
         stage('Configure Argo CD') {
             steps {
                 script {
-                    // Patch service to LoadBalancer
-                    sh """
-                        kubectl patch svc argocd-server -n ${ARGOCD_NAMESPACE} \
-                        -p '{"spec": {"type": "LoadBalancer"}}'
-                    """
+                    // Check if service is already LoadBalancer
+                    def currentServiceType = sh(
+                        script: """
+                            kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath='{.spec.type}'
+                        """,
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Only patch if not already LoadBalancer
+                    if (currentServiceType != "LoadBalancer") {
+                        echo "Patching Argo CD service to LoadBalancer..."
+                        sh """
+                            kubectl patch svc argocd-server -n ${ARGOCD_NAMESPACE} \
+                            -p '{"spec": {"type": "LoadBalancer"}}'
+                        """
+                    } else {
+                        echo "Argo CD service is already LoadBalancer, skipping patch"
+                    }
 
                     // Get admin password 
                     env.ARGOCD_PASSWORD = sh(
