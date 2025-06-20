@@ -276,22 +276,22 @@ pipeline {
                         // First ensure IAM OIDC provider is associated with cluster
                         sh """
                             # Associate IAM OIDC provider if not already associated
-                            eksctl utils associate-iam-oidc-provider \
-                                --cluster ${EKS_CLUSTER_NAME} \
-                                --region ${AWS_REGION} \
+                            eksctl utils associate-iam-oidc-provider \\
+                                --cluster ${EKS_CLUSTER_NAME} \\
+                                --region ${AWS_REGION} \\
                                 --approve
                             
                             # Add EKS Helm repository
                             helm repo add eks https://aws.github.io/eks-charts || true
                             helm repo update
                             
-                            # Create IAM policy if not exists (with proper escaping for JSON query)
-                            POLICY_ARN=\$(aws iam list-policies --query 'Policies[?PolicyName==\`AWSLoadBalancerControllerIAMPolicy\`].Arn' --output text)
+                            # Create IAM policy if not exists (with proper escaping)
+                            POLICY_ARN=\$(aws iam list-policies --query 'Policies[?PolicyName==\\'AWSLoadBalancerControllerIAMPolicy\\'].Arn' --output text)
                             if [ -z "\$POLICY_ARN" ]; then
                                 curl -s -o iam-policy.json https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.4.7/docs/install/iam_policy.json
-                                POLICY_ARN=\$(aws iam create-policy \
-                                    --policy-name AWSLoadBalancerControllerIAMPolicy \
-                                    --policy-document file://iam-policy.json \
+                                POLICY_ARN=\$(aws iam create-policy \\
+                                    --policy-name AWSLoadBalancerControllerIAMPolicy \\
+                                    --policy-document file://iam-policy.json \\
                                     --query 'Policy.Arn' --output text)
                                 rm -f iam-policy.json
                             fi
@@ -301,13 +301,13 @@ pipeline {
                             max_retries=3
                             
                             while [ \$retry_count -lt \$max_retries ]; do
-                                if eksctl create iamserviceaccount \
-                                    --cluster=${EKS_CLUSTER_NAME} \
-                                    --namespace=kube-system \
-                                    --name=aws-load-balancer-controller \
-                                    --attach-policy-arn=\$POLICY_ARN \
-                                    --override-existing-serviceaccounts \
-                                    --region ${AWS_REGION} \
+                                if eksctl create iamserviceaccount \\
+                                    --cluster=${EKS_CLUSTER_NAME} \\
+                                    --namespace=kube-system \\
+                                    --name=aws-load-balancer-controller \\
+                                    --attach-policy-arn=\$POLICY_ARN \\
+                                    --override-existing-serviceaccounts \\
+                                    --region ${AWS_REGION} \\
                                     --approve; then
                                     break
                                 else
@@ -323,11 +323,11 @@ pipeline {
                             fi
                             
                             # Install the Helm chart with wait
-                            helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
-                                -n kube-system \
-                                --set clusterName=${EKS_CLUSTER_NAME} \
-                                --set serviceAccount.create=false \
-                                --set serviceAccount.name=aws-load-balancer-controller \
+                            helm install aws-load-balancer-controller eks/aws-load-balancer-controller \\
+                                -n kube-system \\
+                                --set clusterName=${EKS_CLUSTER_NAME} \\
+                                --set serviceAccount.create=false \\
+                                --set serviceAccount.name=aws-load-balancer-controller \\
                                 --wait
                         """
                     }
@@ -361,7 +361,7 @@ pipeline {
                     // Get version and status information
                     def albVersion = sh(
                         script: """
-                            kubectl get deployment aws-load-balancer-controller -n kube-system \
+                            kubectl get deployment aws-load-balancer-controller -n kube-system \\
                             -o jsonpath='{.spec.template.spec.containers[0].image}' | awk -F: '{print \$NF}'
                         """,
                         returnStdout: true
