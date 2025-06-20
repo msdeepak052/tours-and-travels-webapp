@@ -6,6 +6,7 @@ pipeline {
         string(name: 'ECR_REPO', defaultValue: '', description: 'ECR repository name')
         string(name: 'AWS_REGION', defaultValue: '', description: 'AWS Region')
         string(name: 'APP_NAME', defaultValue: '', description: 'Name of the application')
+        booleanParam(name: 'FORCE_REINSTALL_MONITORING', defaultValue: true, description: 'Force reinstall monitoring stack')
     }
 
     environment {
@@ -132,73 +133,100 @@ pipeline {
             }
         }
         
-        stage("Configure Prometheus & Grafana") {
-            steps {
-                script {
-                    // Install Helm if not already installed
-                    def helmInstalled = sh(
-                        script: 'helm version --short >/dev/null 2>&1 && echo "true" || echo "false"',
-                        returnStdout: true
-                    ).trim()
+       stage("Configure Prometheus & Grafana") {
+        steps {
+            script {
+                // Install Helm if not already installed
+                def helmInstalled = sh(
+                    script: 'helm version --short >/dev/null 2>&1 && echo "true" || echo "false"',
+                    returnStdout: true
+                ).trim()
+                
+                if (helmInstalled == "false") {
+                    sh """
+                        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                    """
+                }
+                
+                // Check if we should force reinstall
+                def forceReinstall = params.FORCE_REINSTALL_MONITORING ?: false
+                def monitoringInstalled = sh(
+                    script: """
+                        if helm status kube-prometheus-stack -n monitoring >/dev/null 2>&1; then
+                            echo "true"
+                        else
+                            echo "false"
+                        fi
+                    """,
+                    returnStdout: true
+                ).trim()
+                
+                if (monitoringInstalled == "true" && !forceReinstall) {
+                    echo "Prometheus and Grafana are already installed, skipping installation."
                     
-                    if (helmInstalled == "false") {
+                    // Still get the URLs and password for reference
+                    sh """
+                        env.GRAFANA_PASSWORD = \$(kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
+                        env.GRAFANA_URL = \$(kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                        env.PROMETHEUS_URL = \$(kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                    """
+                    echo "Grafana URL: http://${env.GRAFANA_URL}"
+                    echo "Prometheus URL: http://${env.PROMETHEUS_URL}"
+                } else {
+                    if (forceReinstall && monitoringInstalled == "true") {
+                        echo "Force reinstall requested - uninstalling existing deployment..."
                         sh """
-                            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+                            helm uninstall kube-prometheus-stack -n monitoring
+                            kubectl delete crd alertmanagerconfigs.monitoring.coreos.com || true
+                            kubectl delete crd alertmanagers.monitoring.coreos.com || true
+                            kubectl delete crd podmonitors.monitoring.coreos.com || true
+                            kubectl delete crd probes.monitoring.coreos.com || true
+                            kubectl delete crd prometheuses.monitoring.coreos.com || true
+                            kubectl delete crd prometheusrules.monitoring.coreos.com || true
+                            kubectl delete crd servicemonitors.monitoring.coreos.com || true
+                            kubectl delete crd thanosrulers.monitoring.coreos.com || true
                         """
                     }
                     
-                    def monitoringInstalled = sh(
-                        script: """
-                            if helm status kube-prometheus-stack -n monitoring >/dev/null 2>&1; then
-                                echo "true"
-                            else
-                                echo "false"
-                            fi
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (monitoringInstalled == "true") {
-                        echo "Prometheus and Grafana are already installed, skipping installation."
-                    } else {
-                        echo "Installing Prometheus and Grafana..."
-                        sh """
-                            # Add Helm repositories
-                            helm repo add stable https://charts.helm.sh/stable || true
-                            helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
-                            helm repo update
-                            
-                            # Create namespace if not exists
-                            kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
-                            
-                            # Install Prometheus Stack
-                            helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-                                -n monitoring \
-                                --set prometheus.service.type=LoadBalancer \
-                                --set grafana.service.type=LoadBalancer \
-                                --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
-                                --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false
-                            
-                            # Wait for Grafana deployment (Prometheus is a StatefulSet)
-                            kubectl wait --for=condition=available deployment/kube-prometheus-stack-grafana -n monitoring --timeout=300s
-                            kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=300s
-                            
-                            # Get Grafana admin password
-                            env.GRAFANA_PASSWORD = \$(kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
-                            
-                            # Get service URLs
-                            env.GRAFANA_URL = \$(kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-                            env.PROMETHEUS_URL = \$(kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-                        """
+                    echo "Installing Prometheus and Grafana..."
+                    sh """
+                        # Add Helm repositories
+                        helm repo add stable https://charts.helm.sh/stable || true
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
+                        helm repo update
                         
-                        echo "Grafana URL: http://${env.GRAFANA_URL}"
-                        echo "Grafana Username: admin"
-                        echo "Grafana Password: ${env.GRAFANA_PASSWORD}"
-                        echo "Prometheus URL: http://${env.PROMETHEUS_URL}"
-                    }
+                        # Create namespace if not exists
+                        kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+                        
+                        # Install Prometheus Stack
+                        helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+                            -n monitoring \
+                            --set prometheus.service.type=LoadBalancer \
+                            --set grafana.service.type=LoadBalancer \
+                            --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+                            --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
+                            --wait
+                        
+                        # Wait for Grafana deployment (Prometheus is a StatefulSet)
+                        kubectl wait --for=condition=available deployment/kube-prometheus-stack-grafana -n monitoring --timeout=300s
+                        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=300s
+                        
+                        # Get Grafana admin password
+                        env.GRAFANA_PASSWORD = \$(kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode)
+                        
+                        # Get service URLs
+                        env.GRAFANA_URL = \$(kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                        env.PROMETHEUS_URL = \$(kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+                    """
+                    
+                    echo "Grafana URL: http://${env.GRAFANA_URL}"
+                    echo "Grafana Username: admin"
+                    echo "Grafana Password: ${env.GRAFANA_PASSWORD}"
+                    echo "Prometheus URL: http://${env.PROMETHEUS_URL}"
                 }
             }
         }
+    }
 
         stage("Install AWS Load Balancer Controller") {
             steps {
