@@ -2,10 +2,10 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'IMAGE_TAG', defaultValue: '', description: 'Tag of the Docker image')
-        string(name: 'ECR_REPO', defaultValue: '', description: 'ECR repository name')
-        string(name: 'AWS_REGION', defaultValue: '', description: 'AWS Region')
-        string(name: 'APP_NAME', defaultValue: '', description: 'Name of the application')
+        string(name: 'IMAGE_TAG', defaultValue: '1.0.4', description: 'Tag of the Docker image')
+        string(name: 'ECR_REPO', defaultValue: 'app/tour-travels-webapp', description: 'ECR repository name')
+        string(name: 'AWS_REGION', defaultValue: 'ap-south-1', description: 'AWS Region')
+        string(name: 'APP_NAME', defaultValue: 'tours-travels-webapp', description: 'Name of the application')
         booleanParam(name: 'FORCE_REINSTALL_MONITORING', defaultValue: true, description: 'Force reinstall monitoring stack')
     }
 
