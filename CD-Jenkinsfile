@@ -16,7 +16,7 @@ pipeline {
         APP_NAME   = "${params.APP_NAME}"
         KUBECONFIG = "/var/lib/jenkins/.kube/config"
         ARGOCD_NAMESPACE = "argocd"
-        ARGOCD_VERSION = "v3.0.5"  // Using stable version
+        ARGOCD_VERSION = "v3.0.5"
         EKS_CLUSTER_NAME = sh(
             script: """
                 aws eks list-clusters --region ${AWS_REGION} --query "clusters[?contains(@, 'deepak')]" --output text | head -1
@@ -42,7 +42,7 @@ pipeline {
         
         stage('Git Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/msdeepak052/tours-and-travels-webapp.git'
+                git branch: 'main', url: "${GIT_REPO}"
             }
         }
         
@@ -73,10 +73,14 @@ pipeline {
                         // Create namespace if not exists
                         sh "kubectl create namespace ${ARGOCD_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -"
 
-                        // Install Argo CD
+                        // Install Argo CD with ClusterIP
                         sh """
                             kubectl apply -n ${ARGOCD_NAMESPACE} -f \
                             https://raw.githubusercontent.com/argoproj/argo-cd/${ARGOCD_VERSION}/manifests/install.yaml
+                            
+                            # Patch service to ClusterIP
+                            kubectl patch svc argocd-server -n ${ARGOCD_NAMESPACE} \
+                            -p '{"spec": {"type": "ClusterIP"}}'
                         """
 
                         // Wait for Argo CD to be ready
@@ -85,7 +89,25 @@ pipeline {
                             -n ${ARGOCD_NAMESPACE} --timeout=300s
                         """
                     } else {
-                        echo "Argo CD is already installed in namespace ${ARGOCD_NAMESPACE}, skipping installation."
+                        echo "Argo CD is already installed in namespace ${ARGOCD_NAMESPACE}"
+                
+                        // Check current service type and only patch if it's LoadBalancer
+                        def currentServiceType = sh(
+                            script: """
+                                kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath='{.spec.type}'
+                            """,
+                            returnStdout: true
+                        ).trim()
+
+                         if (currentServiceType == "LoadBalancer") {
+                            echo "Patching Argo CD service from LoadBalancer to ClusterIP..."
+                            sh """
+                                kubectl patch svc argocd-server -n ${ARGOCD_NAMESPACE} \
+                                -p '{"spec": {"type": "ClusterIP"}}'
+                            """
+                        } else {
+                            echo "Argo CD service is already ${currentServiceType}, no need to patch"
+                        }
                     }
                 }
             }
@@ -94,25 +116,6 @@ pipeline {
         stage('Configure Argo CD') {
             steps {
                 script {
-                    // Check if service is already LoadBalancer
-                    def currentServiceType = sh(
-                        script: """
-                            kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath='{.spec.type}'
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    
-                    // Only patch if not already LoadBalancer
-                    if (currentServiceType != "LoadBalancer") {
-                        echo "Patching Argo CD service to LoadBalancer..."
-                        sh """
-                            kubectl patch svc argocd-server -n ${ARGOCD_NAMESPACE} \
-                            -p '{"spec": {"type": "LoadBalancer"}}'
-                        """
-                    } else {
-                        echo "Argo CD service is already LoadBalancer, skipping patch"
-                    }
-
                     // Get admin password 
                     env.ARGOCD_PASSWORD = sh(
                         script: """
@@ -125,22 +128,15 @@ pipeline {
                         returnStdout: true
                     ).trim()
 
-                    // Get server URL
+                    // Get server ClusterIP
                     env.ARGOCD_SERVER = sh(
                         script: """
-                            timeout 300 bash -c '
-                                until hostname=\$(kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath="{.status.loadBalancer.ingress[0].hostname}") && [ -n "\$hostname" ]
-                                do
-                                    sleep 5
-                                    echo "Waiting for LoadBalancer hostname..."
-                                done
-                                echo "\$hostname"
-                            '
+                            kubectl get svc argocd-server -n ${ARGOCD_NAMESPACE} -o jsonpath='{.spec.clusterIP}'
                         """,
                         returnStdout: true
                     ).trim()
 
-                    echo "Argo CD Server URL: ${env.ARGOCD_SERVER}"
+                    echo "Argo CD ClusterIP: ${env.ARGOCD_SERVER}"
                     echo "Argo CD Admin Password: ${env.ARGOCD_PASSWORD}"   
                 }
             }
@@ -148,19 +144,7 @@ pipeline {
         
         stage("Configure Prometheus & Grafana") {
             steps {
-                script {
-                    // Install Helm if not already installed
-                    def helmInstalled = sh(
-                        script: 'helm version --short >/dev/null 2>&1 && echo "true" || echo "false"',
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (helmInstalled == "false") {
-                        sh """
-                            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-                        """
-                    }
-                    
+                script {                    
                     // Check if we should force reinstall
                     def forceReinstall = params.FORCE_REINSTALL_MONITORING ?: false
                     def monitoringInstalled = sh(
@@ -175,7 +159,27 @@ pipeline {
                     ).trim()
                     
                     if (monitoringInstalled == "true" && !forceReinstall) {
-                        echo "Prometheus and Grafana are already installed, skipping installation."
+                        echo "Prometheus and Grafana are already installed, checking service types..."
+
+                        def prometheusType = sh(
+                            script: "kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.spec.type}'",
+                            returnStdout: true
+                        ).trim()
+
+                        def grafanaType = sh(
+                            script: "kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.spec.type}'",
+                            returnStdout: true
+                        ).trim()
+
+                        if (prometheusType == "LoadBalancer") {
+                            echo "Changing Prometheus service type to ClusterIP..."
+                            sh "kubectl patch svc kube-prometheus-stack-prometheus -n monitoring -p '{\"spec\": {\"type\": \"ClusterIP\"}}'"
+                        }
+
+                        if (grafanaType == "LoadBalancer") {
+                            echo "Changing Grafana service type to ClusterIP..."
+                            sh "kubectl patch svc kube-prometheus-stack-grafana -n monitoring -p '{\"spec\": {\"type\": \"ClusterIP\"}}'"
+                        }
                     } else {
                         if (forceReinstall && monitoringInstalled == "true") {
                             echo "Force reinstall requested - uninstalling existing deployment..."
@@ -192,7 +196,7 @@ pipeline {
                             """
                         }
                         
-                        echo "Installing Prometheus and Grafana..."
+                        echo "Installing Prometheus and Grafana with ClusterIP..."
                         
                         // First update dependencies
                         sh """
@@ -205,13 +209,13 @@ pipeline {
                             kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
                         """
                         
-                        // Install with explicit version and dependency update
+                        // Install with ClusterIP
                         sh """
                             helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
                                 -n monitoring \
                                 --version 45.7.1 \
-                                --set prometheus.service.type=LoadBalancer \
-                                --set grafana.service.type=LoadBalancer \
+                                --set prometheus.service.type=ClusterIP \
+                                --set grafana.service.type=ClusterIP \
                                 --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
                                 --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
                                 --wait \
@@ -225,7 +229,7 @@ pipeline {
                         """
                     }
                     
-                    // Get credentials and URLs
+                    // Get credentials (URLs won't be accessible directly now)
                     env.GRAFANA_PASSWORD = sh(
                         script: """
                             kubectl get secret --namespace monitoring kube-prometheus-stack-grafana -o jsonpath="{.data.admin-password}" | base64 --decode
@@ -233,42 +237,15 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     
-                    env.GRAFANA_URL = sh(
-                        script: """
-                            kubectl get svc kube-prometheus-stack-grafana -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    
-                    env.PROMETHEUS_URL = sh(
-                        script: """
-                            kubectl get svc kube-prometheus-stack-prometheus -n monitoring -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
-                        """,
-                        returnStdout: true
-                    ).trim()
-                    
-                    echo "Grafana URL: http://${env.GRAFANA_URL}"
                     echo "Grafana Username: admin"
                     echo "Grafana Password: ${env.GRAFANA_PASSWORD}"
-                    echo "Prometheus URL: http://${env.PROMETHEUS_URL}"
                 }
             }
         }
-                stage("Install AWS Load Balancer Controller") {
+
+        stage("Install AWS Load Balancer Controller and Ingress") {
             steps {
                 script {
-                    // Verify Helm is installed
-                    def helmInstalled = sh(
-                        script: 'helm version --short >/dev/null 2>&1 && echo "true" || echo "false"',
-                        returnStdout: true
-                    ).trim()
-                    
-                    if (helmInstalled == "false") {
-                        sh """
-                            curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-                        """
-                    }
-
                     // Check if AWS Load Balancer Controller is already installed via Helm
                     def albControllerInstalled = sh(
                         script: """
@@ -300,7 +277,7 @@ pipeline {
                             helm repo update
                         """
 
-                        // Get or create IAM policy and extract its ARN into a Groovy variable
+                        // Get or create IAM policy
                         def policyArn = sh(
                             script: """
                                 aws iam list-policies \
@@ -330,36 +307,17 @@ pipeline {
                             ).trim()
                         }
 
-                        echo "Using policy ARN: ${policyArn}"
-
-                        // Create IAM role and service account with retry logic
-                        def retryCount = 0
-                        def maxRetries = 3
-                        def serviceAccountCreated = false
-
-                        while (retryCount < maxRetries && !serviceAccountCreated) {
-                            try {
-                                sh """
-                                    eksctl create iamserviceaccount \
-                                        --cluster=${EKS_CLUSTER_NAME} \
-                                        --namespace=kube-system \
-                                        --name=aws-load-balancer-controller \
-                                        --attach-policy-arn=${policyArn} \
-                                        --override-existing-serviceaccounts \
-                                        --region ${AWS_REGION} \
-                                        --approve
-                                """
-                                serviceAccountCreated = true
-                            } catch (Exception e) {
-                                retryCount++
-                                echo "Failed to create IAM service account (attempt ${retryCount}/${maxRetries})"
-                                sleep(10)
-                            }
-                        }
-
-                        if (!serviceAccountCreated) {
-                            error("❌ Failed to create IAM service account after ${maxRetries} attempts")
-                        }
+                        // Create IAM role and service account
+                        sh """
+                            eksctl create iamserviceaccount \
+                                --cluster=${EKS_CLUSTER_NAME} \
+                                --namespace=kube-system \
+                                --name=aws-load-balancer-controller \
+                                --attach-policy-arn=${policyArn} \
+                                --override-existing-serviceaccounts \
+                                --region ${AWS_REGION} \
+                                --approve
+                        """
 
                         // Install the Helm chart
                         sh """
@@ -372,7 +330,7 @@ pipeline {
                         """
                     }
 
-                    // Reliable wait until ready
+                    // Wait until ready
                     timeout(time: 5, unit: 'MINUTES') {
                         waitUntil {
                             def status = sh(
@@ -385,6 +343,7 @@ pipeline {
                         }
                     }
 
+                    // Get ingress hostname
                     // Get version and status information
                     def albVersion = sh(
                         script: """
@@ -409,62 +368,53 @@ pipeline {
             }
         }
 
-                
-                stage("Image Tag update in Kubernetes manifests") {
-                    steps {
-                        script {
-                            // Get ECR URL with error handling
-                            def ecrUrl = sh(
-                                script: "aws ecr describe-repositories --repository-names ${ECR_REPO} --region ${AWS_REGION} --query 'repositories[0].repositoryUri' --output text",
-                                returnStdout: true
-                            ).trim()
+        stage("Image Tag update in Kubernetes manifests") {
+            steps {
+                script {
+                    // Get ECR URL with error handling
+                    def ecrUrl = sh(
+                        script: "aws ecr describe-repositories --repository-names ${ECR_REPO} --region ${AWS_REGION} --query 'repositories[0].repositoryUri' --output text",
+                        returnStdout: true
+                    ).trim()
 
-                            if (!ecrUrl) {
-                                error("Failed to retrieve ECR URL for repository: ${ECR_REPO}")
-                            }
-
-                            env.IMAGE_URI = "${ecrUrl}:${IMAGE_TAG}"
-                            env.ECR_IMAGE_NAME = "${env.IMAGE_URI}"
-                            echo "ECR Image Name: ${env.ECR_IMAGE_NAME}"
-
-                            dir('k8s-app-manifests') {
-                                // More robust sed command (works on both GNU and BSD sed)
-                                sh """
-                                    # Backup original file (optional)
-                                    cp tours-travels-webapp-deployment.yml tours-travels-webapp-deployment.yml.bak
-
-                                    # Update image tag
-                                    sed -i.bak 's|image: .*|image: ${env.ECR_IMAGE_NAME}|' tours-travels-webapp-deployment.yml
-                                """
-                                // Verify the change
-                                sh "grep 'image: ' tours-travels-webapp-deployment.yml"
-                            }
-                        }
+                    if (!ecrUrl) {
+                        error("Failed to retrieve ECR URL for repository: ${ECR_REPO}")
                     }
-                }
 
-                stage("Commit code changes and push to GitHub"){
-                    steps{
-                        script{
-                            withCredentials([gitUsernamePassword(credentialsId: 'githubCreds', gitToolName: 'Default')]) {
-                                sh """
-                                    echo "Initializing git repository: "
-                                    git init
-                                
-                                    echo "Adding remote repository: git add"
-                                    git add .
-                                    
-                                    echo "Committing changes to Github Repository "
-                                    git commit -m "Updated Image Tag in Kubernetes manifests to ${env.ECR_IMAGE_NAME}"
-                                    
-                                    echo "Pushing changes to remote repository"
-                                    git push https://github.com/msdeepak052/tours-and-travels-webapp.git main
-                                """
-                            }
-                        }
+                    env.IMAGE_URI = "${ecrUrl}:${IMAGE_TAG}"
+                    env.ECR_IMAGE_NAME = "${env.IMAGE_URI}"
+                    echo "ECR Image Name: ${env.ECR_IMAGE_NAME}"
+
+                    dir('k8s-app-manifests') {
+                        // Update image tag
+                        sh """
+                            sed -i.bak 's|image: .*|image: ${env.ECR_IMAGE_NAME}|' tours-travels-webapp-deployment.yml
+                            
+                            # Ensure service is ClusterIP
+                            sed -i.bak 's/type: .*/type: ClusterIP/' tours-travels-webapp-service.yml
+                        """
+                        // Verify the changes
+                        sh "grep 'image: ' tours-travels-webapp-deployment.yml"
+                        sh "grep 'type: ' tours-travels-webapp-service.yml"
                     }
                 }
             }
+        }
+
+        stage("Commit code changes and push to GitHub"){
+            steps{
+                script{
+                    withCredentials([gitUsernamePassword(credentialsId: 'githubCreds', gitToolName: 'Default')]) {
+                        sh """
+                            git add .
+                            git commit -m "Updated Image Tag in Kubernetes manifests to ${env.ECR_IMAGE_NAME} and set services to ClusterIP"
+                            git push https://github.com/msdeepak052/tours-and-travels-webapp.git main
+                        """
+                    }
+                }
+            }
+        }
+    }
 
     post {
         always {
@@ -476,32 +426,16 @@ pipeline {
         
         success {
             script {
-                // Safely get application URL (won't fail if service/namespace doesn't exist)
-                def appUrl = sh(
-                    script: """
-                        kubectl get service tours-travels-service -n app-ns -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo ""
-                    """,
-                    returnStdout: true
-                ).trim()
-
-                // Set APP_URL only if we got a valid value
-                if (appUrl) {
-                    env.APP_URL = appUrl
-                    echo "Application URL: <a href='http://${env.APP_URL}'>http://${env.APP_URL}</a>"
-                } else {
-                    echo "ℹ️ Service/Namespace not found - No application URL available"
-                }
-
                 echo "✅ DEPLOYMENT SUCCESSFUL"
-                echo "Argo CD Dashboard: http://${env.ARGOCD_SERVER}"
-                echo "Grafana Dashboard: http://${env.GRAFANA_URL}"
-                echo "Prometheus Dashboard: http://${env.PROMETHEUS_URL}"
+                echo "Ingress URL: http://${env.INGRESS_HOSTNAME}"
+                echo "Application: http://${env.INGRESS_HOSTNAME}"
+                echo "Argo CD: http://${env.INGRESS_HOSTNAME}/argocd"
+                echo "Grafana: http://${env.INGRESS_HOSTNAME}/grafana"
+                echo "Prometheus: http://${env.INGRESS_HOSTNAME}/prometheus"
                 
-                // For email notifications or other uses where you still want the raw URL:
-                echo "Raw Argo CD URL: http://${env.ARGOCD_SERVER}"
-                if (appUrl) {
-                    echo "Raw Application URL: http://${env.APP_URL}"
-                }
+                echo "Argo CD Admin Password: ${env.ARGOCD_PASSWORD}"
+                echo "Grafana Username: admin"
+                echo "Grafana Password: ${env.GRAFANA_PASSWORD}"
             }
         }
         
