@@ -14,9 +14,8 @@ metadata:
     alb.ingress.kubernetes.io/rewrite-target: /
     # Add these ArgoCD-specific annotations
     alb.ingress.kubernetes.io/backend-protocol: HTTPS
-    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+    alb.ingress.kubernetes.io/healthcheck-port: "443"
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
 spec:
   ingressClassName: alb
   rules:
