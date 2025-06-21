@@ -8,14 +8,15 @@ metadata:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/rewrite-target: "/"
 spec:
   ingressClassName: alb
   rules:
     - host: argocd.devopswithdeepak.co.in
       http:
         paths:
-          - path: /
-            pathType: Prefix
+          - path: /argocd(/|$)(.*)  # Regex capture
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: argocd-server
