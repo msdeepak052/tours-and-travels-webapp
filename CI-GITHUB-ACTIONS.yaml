@@ -1,0 +1,140 @@
+name: Tours and Travels WebApp CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  APP_NAME: "tours-travels-webapp"
+  VERSION: "1.0.${{ github.run_number }}"
+  NEXUS_URL: "nexus.devopswithdeepak.co.in"
+  NEXUS_REPOSITORY: "tours-travels-webapp"
+  ECR_REPO: "app/tour-travels-webapp"
+  AWS_REGION: "ap-south-1"
+  TRIVY_CACHE_DIR: ".trivycache"
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+  NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Maven
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'maven'
+          maven-version: '3.9.9'
+
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: ${{ env.APP_NAME }}
+          format: HTML
+          failOnCVSS: 8
+          scanPath: '.'
+
+      - name: Build with Maven
+        run: |
+          mvn versions:set -DnewVersion=${{ env.VERSION }}
+          mvn clean package
+
+      - name: SonarQube Analysis
+        uses: sonarsource/sonarqube-scan-action@master
+        with:
+          args: >
+            -Dsonar.projectKey=${{ env.APP_NAME }}
+            -Dsonar.projectName=${{ env.APP_NAME }}
+            -Dsonar.projectVersion=${{ env.VERSION }}
+            -Dsonar.sources=src
+            -Dsonar.java.binaries=target/classes
+
+      - name: Upload to Nexus
+        run: |
+          mvn deploy:deploy-file \
+            -DgroupId=com.tours.app \
+            -DartifactId=${{ env.APP_NAME }} \
+            -Dversion=${{ env.VERSION }} \
+            -Dpackaging=jar \
+            -Dfile=target/${{ env.APP_NAME }}-${{ env.VERSION }}.jar \
+            -DrepositoryId=nexus \
+            -Durl=http://${{ env.NEXUS_URL }}/repository/${{ env.NEXUS_REPOSITORY }} \
+            -s settings.xml
+        env:
+          MAVEN_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Get ECR repository URI
+        id: get-ecr-repo
+        run: |
+          echo "ecr_repo=$(aws ecr describe-repositories --repository-names ${{ env.ECR_REPO }} --region ${{ env.AWS_REGION }} --query 'repositories[0].repositoryUri' --output text)" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --build-arg APP_NAME=${{ env.APP_NAME }}-${{ env.VERSION }}.jar \
+            -t ${{ steps.get-ecr-repo.outputs.ecr_repo }}:${{ env.VERSION }} .
+        env:
+          IMAGE_URI: ${{ steps.get-ecr-repo.outputs.ecr_repo }}:${{ env.VERSION }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.get-ecr-repo.outputs.ecr_repo }}:${{ env.VERSION }}
+          format: 'template'
+          template: '@/contrib/html.tpl'
+          output: 'trivy-report.html'
+          severity: 'HIGH,CRITICAL'
+          cache-dir: ${{ env.TRIVY_CACHE_DIR }}
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v3
+        with:
+          name: trivy-report
+          path: trivy-report.html
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ steps.get-ecr-repo.outputs.ecr_repo }}:${{ env.VERSION }}
+
+      - name: Trigger CD pipeline
+        if: success()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: 'tours-travels-app-cd',
+              workflow_id: 'cd.yml',
+              ref: 'main',
+              inputs: {
+                IMAGE_TAG: '${{ env.VERSION }}',
+                ECR_REPO: '${{ env.ECR_REPO }}',
+                AWS_REGION: '${{ env.AWS_REGION }}',
+                APP_NAME: '${{ env.APP_NAME }}'
+              }
+            })
+
+      - name: Clean up workspace
+        if: always()
+        run: |
+          rm -rf target
+          rm -rf ${{ env.TRIVY_CACHE_DIR }}
