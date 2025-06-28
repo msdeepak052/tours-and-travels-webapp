@@ -63,20 +63,32 @@ jobs:
             -Dsonar.sources=src
             -Dsonar.java.binaries=target/classes
 
-      - name: Upload to Nexus
-        run: |
-          mvn deploy:deploy-file \
-            -DgroupId=com.tours.app \
-            -DartifactId=${{ env.APP_NAME }} \
-            -Dversion=${{ env.VERSION }} \
-            -Dpackaging=jar \
-            -Dfile=target/${{ env.APP_NAME }}-${{ env.VERSION }}.jar \
-            -DrepositoryId=nexus \
-            -Durl=http://${{ env.NEXUS_URL }}/repository/${{ env.NEXUS_REPOSITORY }} \
-            -s settings.xml
-        env:
-          MAVEN_USERNAME: ${{ secrets.NEXUS_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+      # - name: Upload to Nexus
+      #   run: |
+      #     mvn deploy:deploy-file \
+      #       -DgroupId=com.tours.app \
+      #       -DartifactId=${{ env.APP_NAME }} \
+      #       -Dversion=${{ env.VERSION }} \
+      #       -Dpackaging=jar \
+      #       -Dfile=target/${{ env.APP_NAME }}-${{ env.VERSION }}.jar \
+      #       -DrepositoryId=nexus \
+      #       -Durl=http://${{ env.NEXUS_URL }}/repository/${{ env.NEXUS_REPOSITORY }} \
+      #       -s settings.xml
+      #   env:
+      #     MAVEN_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+      #     MAVEN_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+
+    - name: Nexus Repo Publish
+      uses: sonatype-nexus-community/nexus-repo-github-action@master
+      with:
+        serverUrl: http://163c6cdd.ngrok.io
+        username: admin
+        password: ${{ secrets.password }}
+        format: maven2
+        repository: maven-releases
+        coordinates: groupId=com.example artifactId=app version=1.0.0
+        assets: extension=jar
+        filename: ./target/app-1.0.0.jar
 
       - name: Login to Amazon ECR
         id: login-ecr
